@@ -50,6 +50,30 @@
     font-family: inherit;
 }
 
+/* ── Search bar ───────────────────────────────────── */
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1.5px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.95rem;
+    color: var(--text);
+    outline: none;
+    min-width: 0;
+}
+
+.search-input::placeholder {
+    color: var(--text3);
+}
 /* ── Category bar ─────────────────────────────────── */
 .cat-bar {
     display: flex;

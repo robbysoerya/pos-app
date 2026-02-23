@@ -7,7 +7,7 @@ import db from '../db/db.js'
 import { fmtCurrency } from '../utils/format.js'
 import './Products.css'
 
-const EMPTY_FORM = { name: '', categoryId: '', price: '', stock: '', low_stock_threshold: '', barcode: '' }
+const EMPTY_FORM = { name: '', categoryId: '', price: '', resellerPrice: '', stock: '', low_stock_threshold: '', barcode: '' }
 
 export default function Products() {
     const categories = useLiveQuery(() => db.categories.toArray(), [])
@@ -27,10 +27,20 @@ export default function Products() {
     function openEdit(p) {
         setForm({
             name: p.name, categoryId: p.categoryId ?? '', price: String(p.price),
+            resellerPrice: String(p.resellerPrice ?? ''),
             stock: String(p.stock), low_stock_threshold: String(p.low_stock_threshold ?? ''),
             barcode: p.barcode ?? ''
         })
         setModal({ id: p.id })
+    }
+    function openDuplicate(p) {
+        setForm({
+            name: p.name, categoryId: p.categoryId ?? '', price: String(p.price),
+            resellerPrice: String(p.resellerPrice ?? ''),
+            stock: String(p.stock), low_stock_threshold: String(p.low_stock_threshold ?? ''),
+            barcode: ''
+        })
+        setModal({ id: null, isDuplicate: true })
     }
     function setField(k, v) { setForm(f => ({ ...f, [k]: v })) }
 
@@ -40,7 +50,9 @@ export default function Products() {
         const payload = {
             name: form.name.trim(),
             categoryId: form.categoryId ? Number(form.categoryId) : null,
-            price: Number(form.price), stock: Number(form.stock) || 0,
+            price: Number(form.price),
+            resellerPrice: form.resellerPrice ? Number(form.resellerPrice) : Number(form.price),
+            stock: Number(form.stock) || 0,
             low_stock_threshold: Number(form.low_stock_threshold) || 0,
             barcode: form.barcode.trim() || null,
         }
@@ -114,7 +126,7 @@ export default function Products() {
                                     <div className="product-row-name">{p.name}</div>
                                     <div className="product-row-meta">
                                         <span className="text2">{catMap[p.categoryId] || '—'}</span>
-                                        <span>{fmtCurrency(p.price)}</span>
+                                        <span>{fmtCurrency(p.price)} {p.resellerPrice && p.resellerPrice !== p.price ? `/ ${fmtCurrency(p.resellerPrice)}` : ''}</span>
                                         {p.barcode && <span className="text2" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{p.barcode}</span>}
                                         {isOut
                                             ? <span className="badge badge-danger">Habis</span>
@@ -128,10 +140,13 @@ export default function Products() {
                                     <button className="qty-btn" onClick={() => adjustStock(p, +1)}>+</button>
                                 </div>
                                 <div className="flex gap2">
-                                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)}>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => openDuplicate(p)} title="Duplikat">
+                                        <Icon name="content_copy" size={16} />
+                                    </button>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)} title="Edit">
                                         <Icon name="edit" size={16} />
                                     </button>
-                                    <button className="btn btn-danger btn-sm" onClick={() => openDelete(p)}>
+                                    <button className="btn btn-danger btn-sm" onClick={() => openDelete(p)} title="Hapus">
                                         <Icon name="delete" size={16} />
                                     </button>
                                 </div>
@@ -141,10 +156,10 @@ export default function Products() {
                 </div>
             </div>
 
-            <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.id ? 'Edit Produk' : 'Tambah Produk'} width="500px">
+            <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.id ? 'Edit Produk' : (modal?.isDuplicate ? 'Duplikat Produk' : 'Tambah Produk')} width="500px">
                 <div className="flex-col gap4">
                     <div className="form-group">
-                        <label>Nama Produk</label>
+                        <label>Nama Produk <span style={{ color: 'var(--danger, #ef4444)' }}>*</span></label>
                         <input id="prod-name" className="input" placeholder="Nama produk" value={form.name} onChange={e => setField('name', e.target.value)} autoFocus />
                     </div>
                     <div className="form-group">
@@ -160,9 +175,15 @@ export default function Products() {
                     </div>
                     <div className="form-row">
                         <div className="form-group">
-                            <label>Harga (Rp)</label>
-                            <input className="input" type="number" min="0" placeholder="0" value={form.price} onChange={e => setField('price', e.target.value)} />
+                            <label>Harga Jual (Rp) <span style={{ color: 'var(--danger, #ef4444)' }}>*</span></label>
+                            <input className="input" type="text" inputMode="numeric" placeholder="0" value={form.price ? Number(form.price).toLocaleString('id-ID') : ''} onChange={e => setField('price', e.target.value.replace(/\D/g, ''))} />
                         </div>
+                        <div className="form-group">
+                            <label>Harga Pengecer (Rp)</label>
+                            <input className="input" type="text" inputMode="numeric" placeholder="0" value={form.resellerPrice ? Number(form.resellerPrice).toLocaleString('id-ID') : ''} onChange={e => setField('resellerPrice', e.target.value.replace(/\D/g, ''))} />
+                        </div>
+                    </div>
+                    <div className="form-row">
                         <div className="form-group">
                             <label>Stok Awal</label>
                             <input className="input" type="number" min="0" placeholder="0" value={form.stock} onChange={e => setField('stock', e.target.value)} />
@@ -174,7 +195,7 @@ export default function Products() {
                     </div>
                     <div className="flex gap3 mt2">
                         <button className="btn btn-ghost" onClick={() => setModal(null)}>Batal</button>
-                        <button className="btn btn-primary btn-block" onClick={handleSave} disabled={loading}>
+                        <button className="btn btn-primary btn-block" onClick={handleSave} disabled={loading || !form.name.trim() || !form.price}>
                             <Icon name="save" size={18} /> {loading ? 'Menyimpan...' : 'Simpan'}
                         </button>
                     </div>
