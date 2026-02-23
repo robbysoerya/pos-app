@@ -25,8 +25,7 @@ let _char = null
 
 export async function connectPrinter() {
     const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [PRINTER_SERVICE_UUID],
+        filters: [{ services: [PRINTER_SERVICE_UUID] }],
     })
 
     const server = await device.gatt.connect()
