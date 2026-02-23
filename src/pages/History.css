@@ -1,0 +1,91 @@
+.history-summary {
+    display: flex;
+    gap: 24px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1.5px solid var(--border);
+    flex-shrink: 0;
+}
+
+.summary-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.summary-val {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.summary-lbl {
+    font-size: 0.75rem;
+    color: var(--text2);
+}
+
+.txn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.txn-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r2);
+    padding: 14px 16px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, background .15s;
+    width: 100%;
+}
+
+.txn-card:hover {
+    border-color: var(--primary);
+    background: var(--surface2);
+}
+
+.txn-card:active {
+    transform: scale(0.99);
+}
+
+.txn-id {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 0.95rem;
+}
+
+.txn-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.82rem;
+}
+
+.txn-total {
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.txn-arrow {
+    color: var(--text2);
+    font-size: 1.4rem;
+}
+
+.txn-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detail-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    font-size: 0.9rem;
+    align-items: center;
+}

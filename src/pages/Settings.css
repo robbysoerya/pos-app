@@ -1,0 +1,43 @@
+.settings-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.settings-card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r3);
+    padding: 20px;
+}
+
+.settings-card h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+}
+
+.printer-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+}
+
+.printer-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text2);
+    flex-shrink: 0;
+    transition: background .3s;
+}
+
+.printer-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.danger-zone {
+    border-color: rgba(220, 38, 38, .3);
+    background: rgba(220, 38, 38, .04);
+}

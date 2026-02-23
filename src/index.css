@@ -1,0 +1,378 @@
+/* ── Reset & Base ─────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Colors — Light Mode */
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface2: #f7f8fa;
+  --surface3: #eef0f3;
+  --border: #dde1e8;
+  --primary: #4f46e5;
+  --primary-h: #6056f5;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+  --text: #111827;
+  --text2: #6b7280;
+  --text3: #9ca3af;
+
+  /* Spacing */
+  --sp1: 4px;
+  --sp2: 8px;
+  --sp3: 12px;
+  --sp4: 16px;
+  --sp5: 20px;
+  --sp6: 24px;
+  --sp8: 32px;
+
+  /* Radius */
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 16px;
+  --r4: 24px;
+
+  /* Font */
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+
+  /* Touch */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── Scrollable container ────────────────────────── */
+.scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Typography ──────────────────────────────────── */
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+small {
+  font-size: 0.8rem;
+  color: var(--text2);
+}
+
+/* ── Buttons ──────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp2);
+  padding: var(--sp3) var(--sp5);
+  border: none;
+  border-radius: var(--r2);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  min-height: 48px;
+  min-width: 48px;
+  transition: opacity .15s, transform .1s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+  opacity: .85;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--primary-h);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-success {
+  background: var(--success);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+
+.btn-ghost:hover {
+  background: var(--surface3);
+}
+
+.btn-sm {
+  padding: var(--sp2) var(--sp3);
+  font-size: 0.85rem;
+  min-height: 36px;
+}
+
+.btn-lg {
+  padding: var(--sp4) var(--sp6);
+  font-size: 1.1rem;
+  min-height: 56px;
+  border-radius: var(--r3);
+}
+
+.btn-block {
+  width: 100%;
+  display: flex;
+}
+
+.btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* ── Inputs ──────────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: var(--sp3) var(--sp4);
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+  min-height: 48px;
+  transition: border-color .2s;
+}
+
+.input:focus {
+  border-color: var(--primary);
+}
+
+.input::placeholder {
+  color: var(--text2);
+}
+
+select.input {
+  cursor: pointer;
+}
+
+/* ── Cards ───────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r3);
+  padding: var(--sp5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+}
+
+/* ── Badges ──────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-warning {
+  background: rgba(240, 165, 0, .2);
+  color: var(--warning);
+}
+
+.badge-danger {
+  background: rgba(224, 82, 82, .2);
+  color: var(--danger);
+}
+
+.badge-success {
+  background: rgba(76, 175, 125, .2);
+  color: var(--success);
+}
+
+.badge-primary {
+  background: rgba(79, 70, 229, .12);
+  color: var(--primary);
+}
+
+/* ── Form group ──────────────────────────────────── */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp2);
+}
+
+.form-row {
+  display: flex;
+  gap: var(--sp4);
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text2);
+}
+
+/* ── Divider ─────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--sp4) 0;
+}
+
+/* ── Utilities ───────────────────────────────────── */
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap2 {
+  gap: var(--sp2);
+}
+
+.gap3 {
+  gap: var(--sp3);
+}
+
+.gap4 {
+  gap: var(--sp4);
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text2 {
+  color: var(--text2);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-warning {
+  color: var(--warning);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.font-mono {
+  font-family: monospace;
+}
+
+.mt2 {
+  margin-top: var(--sp2);
+}
+
+.mt3 {
+  margin-top: var(--sp3);
+}
+
+.mt4 {
+  margin-top: var(--sp4);
+}
+
+.mb2 {
+  margin-bottom: var(--sp2);
+}
+
+.mb4 {
+  margin-bottom: var(--sp4);
+}
+
+/* ── Spinner ─────────────────────────────────────── */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: inline-block;
+}
+
+/* ── Empty state ────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp4);
+  padding: var(--sp8);
+  color: var(--text2);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.empty-state .empty-icon {
+  font-size: 3rem;
+  opacity: .5;
+}

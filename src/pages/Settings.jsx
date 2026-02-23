@@ -1,0 +1,234 @@
+import { useEffect, useRef, useState } from 'react'
+import Icon from '../components/Icon.jsx'
+import Modal from '../components/Modal.jsx'
+import { showToast } from '../components/Toast.jsx'
+import db from '../db/db.js'
+import { exportBackup, importBackup } from '../utils/backup.js'
+import { connectPrinter, disconnectPrinter, getPrinterName, isPrinterConnected } from '../utils/bluetooth.js'
+import './Settings.css'
+
+export default function Settings() {
+    const [storeName, setStoreName] = useState('')
+    const [printerName, setPrinterName] = useState(getPrinterName())
+    const [printerConnected, setPrinterConnected] = useState(isPrinterConnected())
+    const [connecting, setConnecting] = useState(false)
+    const [restoring, setRestoring] = useState(false)
+    const [deferredPrompt, setDeferredPrompt] = useState(null)
+    const [pendingImportFile, setPendingImportFile] = useState(null)
+    const [showClearModal, setShowClearModal] = useState(false)
+    const fileRef = useRef()
+
+    useEffect(() => {
+        db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
+    }, [])
+
+    useEffect(() => {
+        const handler = e => { e.preventDefault(); setDeferredPrompt(e) }
+        window.addEventListener('beforeinstallprompt', handler)
+        return () => window.removeEventListener('beforeinstallprompt', handler)
+    }, [])
+
+    async function saveStoreName() {
+        await db.settings.put({ key: 'storeName', value: storeName.trim() || 'My Store' })
+        showToast('Nama toko disimpan', 'success')
+    }
+
+    async function handleConnect() {
+        if (!navigator.bluetooth) return showToast('Web Bluetooth tidak didukung browser ini', 'error')
+        setConnecting(true)
+        try {
+            const name = await connectPrinter()
+            setPrinterName(name); setPrinterConnected(true)
+            showToast(`Terhubung ke ${name}`, 'success')
+        } catch (e) {
+            if (e.name !== 'NotFoundError') showToast('Gagal: ' + e.message, 'error')
+        } finally { setConnecting(false) }
+    }
+
+    async function handleDisconnect() {
+        await disconnectPrinter(); setPrinterConnected(false)
+        showToast('Printer terputus', 'info')
+    }
+
+    async function handleExport() {
+        try {
+            const saved = await exportBackup(storeName || 'My Store')
+            if (saved) showToast('Backup berhasil diunduh', 'success')
+        } catch (e) { showToast('Gagal export: ' + e.message, 'error') }
+    }
+
+    function handleImport(e) {
+        const file = e.target.files?.[0]
+        if (!file) return
+        // Store the file and show a React modal for confirmation.
+        // Chrome blocks window.confirm() after a file-picker gesture, so
+        // we use a custom modal instead.
+        setPendingImportFile(file)
+        fileRef.current.value = ''
+    }
+
+    async function confirmImport() {
+        const file = pendingImportFile
+        setPendingImportFile(null)
+        if (!file) return
+        setRestoring(true)
+        try {
+            await importBackup(file)
+            showToast('Restore berhasil!', 'success')
+        } catch (e) { showToast('Gagal import: ' + e.message, 'error') }
+        finally { setRestoring(false) }
+    }
+
+    function cancelImport() {
+        setPendingImportFile(null)
+    }
+
+    async function handleInstall() {
+        if (!deferredPrompt) return showToast('Gunakan tombol install di address bar Chrome', 'info')
+        deferredPrompt.prompt()
+        const { outcome } = await deferredPrompt.userChoice
+        if (outcome === 'accepted') { setDeferredPrompt(null); showToast('App berhasil diinstal!', 'success') }
+    }
+
+    async function confirmClearAll() {
+        setShowClearModal(false)
+        await db.transaction('rw', [db.categories, db.products, db.transactions, db.table('transaction_items'), db.stock_movements, db.settings], async () => {
+            await db.categories.clear(); await db.products.clear()
+            await db.transactions.clear(); await db.table('transaction_items').clear()
+            await db.stock_movements.clear(); await db.settings.clear()
+        })
+        showToast('Semua data dihapus', 'info'); setStoreName('')
+    }
+
+    return (
+        <div className="page">
+            <div className="page-header">
+                <h1><Icon name="settings" size={26} filled style={{ marginRight: 8 }} />Pengaturan</h1>
+            </div>
+            <div className="page-body">
+                <div className="settings-sections">
+
+                    <section className="settings-card">
+                        <h2><Icon name="storefront" size={20} style={{ marginRight: 6 }} />Nama Toko</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di header struk cetak.</p>
+                        <div className="flex gap3">
+                            <input id="store-name-input" className="input" placeholder="My Store"
+                                value={storeName} onChange={e => setStoreName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && saveStoreName()} />
+                            <button className="btn btn-primary" onClick={saveStoreName}>
+                                <Icon name="save" size={18} /> Simpan
+                            </button>
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="print" size={20} style={{ marginRight: 6 }} />Printer Bluetooth</h2>
+                        <div className="printer-status">
+                            <div className={`printer-dot ${printerConnected ? 'connected' : ''}`} />
+                            <span>{printerConnected ? `Terhubung: ${printerName}` : (printerName ? `Terputus: ${printerName}` : 'Belum ada printer')}</span>
+                        </div>
+                        <div className="flex gap3 mt3">
+                            <button id="connect-printer-btn" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
+                                <Icon name={connecting ? 'hourglass_top' : 'bluetooth_searching'} size={18} />
+                                {connecting ? 'Menghubungkan...' : 'Cari & Hubungkan'}
+                            </button>
+                            {printerConnected && (
+                                <button className="btn btn-ghost" onClick={handleDisconnect}>
+                                    <Icon name="bluetooth_disabled" size={18} /> Putuskan
+                                </button>
+                            )}
+                        </div>
+                        <p className="text2 mt3" style={{ fontSize: '0.8rem' }}>
+                            Web Bluetooth membutuhkan Chrome di Android/desktop. Printer harus support ESC/POS via BLE.
+                        </p>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="backup" size={20} style={{ marginRight: 6 }} />Backup & Restore</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
+                            Export semua data ke file JSON. Import untuk restore.
+                        </p>
+                        <div className="flex gap3">
+                            <button id="export-btn" className="btn btn-primary" onClick={handleExport}>
+                                <Icon name="download" size={18} /> Export Backup
+                            </button>
+                            <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+                                <Icon name="upload" size={18} /> {restoring ? 'Restoring...' : 'Import Restore'}
+                                <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+                            </label>
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="install_mobile" size={20} style={{ marginRight: 6 }} />Install App</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
+                            Install sebagai aplikasi di tablet untuk pengalaman layar penuh.
+                        </p>
+                        <button className="btn btn-primary" onClick={handleInstall}>
+                            <Icon name="install_mobile" size={18} />
+                            {deferredPrompt ? 'Install Sekarang' : 'Buka dari address bar Chrome'}
+                        </button>
+                    </section>
+
+                    <section className="settings-card danger-zone">
+                        <h2><Icon name="warning" size={20} filled style={{ marginRight: 6, color: 'var(--danger)' }} />Zona Bahaya</h2>
+                        <button className="btn btn-danger" onClick={() => setShowClearModal(true)}>
+                            <Icon name="delete_forever" size={18} /> Hapus Semua Data
+                        </button>
+                    </section>
+
+                </div>
+            </div>
+
+            {/* Import confirmation modal */}
+            <Modal
+                open={!!pendingImportFile}
+                onClose={cancelImport}
+                title="Konfirmasi Import"
+                width="400px"
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <p style={{ margin: 0, lineHeight: 1.6 }}>
+                        Import akan <strong>MENGGANTI SEMUA DATA</strong> yang ada dengan isi file backup.<br />
+                        Aksi ini tidak bisa dibatalkan. Lanjutkan?
+                    </p>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-ghost" onClick={cancelImport}>
+                            <Icon name="close" size={18} /> Batal
+                        </button>
+                        <button className="btn btn-danger" onClick={confirmImport}>
+                            <Icon name="upload" size={18} /> Ya, Import
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Clear all data confirmation modal */}
+            <Modal
+                open={showClearModal}
+                onClose={() => setShowClearModal(false)}
+                title="Hapus Semua Data"
+                width="400px"
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <Icon name="warning" size={28} filled style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
+                        <p style={{ margin: 0, lineHeight: 1.6 }}>
+                            Tindakan ini akan <strong>menghapus seluruh data</strong> termasuk produk, kategori,
+                            riwayat transaksi, dan pengaturan.<br />
+                            <strong>Aksi ini tidak bisa dibatalkan.</strong>
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-ghost" onClick={() => setShowClearModal(false)}>
+                            <Icon name="close" size={18} /> Batal
+                        </button>
+                        <button className="btn btn-danger" onClick={confirmClearAll}>
+                            <Icon name="delete_forever" size={18} /> Ya, Hapus Semua
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
+    )
+}

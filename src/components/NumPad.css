@@ -1,0 +1,45 @@
+.numpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.numpad-key {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1.2rem;
+    font-weight: 600;
+    padding: 14px 8px;
+    min-height: 54px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .1s, transform .1s;
+}
+
+.numpad-key:active {
+    background: var(--surface3);
+    transform: scale(0.96);
+}
+
+.numpad-back {
+    color: var(--danger);
+}
+
+.numpad-exact {
+    grid-column: 1 / -1;
+    background: rgba(79, 70, 229, .08);
+    border-color: rgba(79, 70, 229, .25);
+    color: var(--primary);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.numpad-exact:active {
+    background: rgba(79, 70, 229, .18);
+}

@@ -1,0 +1,20 @@
+.cat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cat-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r2);
+    padding: 14px 16px;
+}
+
+.cat-list-name {
+    font-size: 1rem;
+    font-weight: 500;
+}
