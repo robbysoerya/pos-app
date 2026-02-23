@@ -15,7 +15,7 @@ export function fmtDateTime(isoStr) {
     return new Date(isoStr).toLocaleString('id-ID', {
         year: 'numeric', month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
-    })
+    }).replace(/\./g, ':')
 }
 
 /** Format transaction number */

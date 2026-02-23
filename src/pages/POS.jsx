@@ -7,7 +7,7 @@ import { showToast } from '../components/Toast.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import db from '../db/db.js'
 import { isPrinterConnected, printReceipt } from '../utils/bluetooth.js'
-import { fmtCurrency, parseAmount } from '../utils/format.js'
+import { fmtCurrency, fmtDateTime, parseAmount } from '../utils/format.js'
 import './POS.css'
 
 export default function POS() {
@@ -247,7 +247,7 @@ function ReceiptPreview({ txn, onClose }) {
 
     return (
         <div className="receipt-preview">
-            <div className="receipt-row"><span>Waktu</span><span>{new Date(txn.createdAt).toLocaleString('id-ID')}</span></div>
+            <div className="receipt-row"><span>Waktu</span><span>{fmtDateTime(txn.createdAt)}</span></div>
             <div className="divider" />
             {txn.items.map((item, i) => (
                 <div key={i} className="receipt-row">

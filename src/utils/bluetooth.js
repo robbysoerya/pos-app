@@ -111,8 +111,8 @@ function buildReceipt(txn, storeName) {
     push(...ALIGN_LEFT)
 
     const date = new Date(txn.createdAt)
-    push(...text(`Date: ${date.toLocaleDateString('id-ID')}`))
-    push(...text(`Time: ${date.toLocaleTimeString('id-ID')}`))
+    push(...text(`Tanggal: ${date.toLocaleDateString('id-ID')}`))
+    push(...text(`Waktu: ${date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':')}`))
     push(...text(`No:   #${String(txn.id).padStart(6, '0')}`))
     push(...text('--------------------------------'))
 
