@@ -53,8 +53,8 @@
 html,
 body,
 #root {
-  height: 100%;
-  width: 100%;
+  height: 100dvh;
+    width: 100vw;
   overflow: hidden;
 }
 
@@ -375,4 +375,28 @@ label {
 .empty-state .empty-icon {
   font-size: 3rem;
   opacity: .5;
+}
+/* ── Responsive Globals ──────────────────────────── */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.25rem;
+  }
+
+  h2 {
+    font-size: 1.1rem;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: var(--sp3);
+  }
+
+  .empty-state {
+    padding: var(--sp5);
+  }
+
+  /* Flex utility wrapping */
+  .flex.gap3 {
+    flex-wrap: wrap;
+  }
 }

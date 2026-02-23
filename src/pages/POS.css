@@ -333,3 +333,73 @@
     align-items: center;
     font-size: 0.9rem;
 }
+/* ── Responsive POS Layout ───────────────────────── */
+@media (max-width: 768px) {
+    .pos-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: 100%;
+        overflow-y: auto;
+    }
+
+    .pos-left {
+        flex: none;
+        border-right: none;
+        border-bottom: 3px solid var(--border);
+    }
+
+    .pos-right {
+        flex: none;
+        height: auto;
+        overflow: visible;
+    }
+
+    .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .product-card {
+        min-height: 80px;
+        padding: 10px;
+    }
+
+    .product-name {
+        font-size: 0.85rem;
+    }
+
+    .cart-section {
+        overflow: visible;
+        flex: none;
+    }
+
+    .payment-section {
+        padding: 12px;
+        gap: 8px;
+    }
+
+    .total-amount {
+        font-size: 1.2rem;
+    }
+
+    .payment-value {
+        font-size: 1.15rem;
+    }
+}
+
+/* For small / landscape phones */
+@media (max-height: 500px) and (orientation: landscape) {
+    .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+
+    .payment-section {
+        overflow-y: auto;
+    }
+
+    .cart-section {
+        flex: 0.8;
+        /* Make it take less space if needed, or let flex handle it */
+    }
+}
