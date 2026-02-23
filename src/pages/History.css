@@ -1,8 +1,9 @@
 .history-summary {
-    display: flex;
-    gap: 24px;
-    padding: 12px 20px;
-    background: var(--surface);
+    display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        padding: 16px 20px;
+        background: var(--surface2);
     border-bottom: 1.5px solid var(--border);
     flex-shrink: 0;
 }
@@ -10,7 +11,12 @@
 .summary-stat {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: var(--r2);
+        padding: 12px 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .summary-val {

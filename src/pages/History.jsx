@@ -13,7 +13,7 @@ export default function History() {
         db.transactions.orderBy('createdAt').reverse().toArray(), [])
 
     const [detail, setDetail] = useState(null)
-    const [dateFilter, setDateFilter] = useState('')
+    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
 
     async function openDetail(txn) {
         const items = await db.table('transaction_items').where('transactionId').equals(txn.id).toArray()
@@ -33,6 +33,25 @@ export default function History() {
 
     const filtered = (transactions || []).filter(txn => !dateFilter || txn.createdAt.startsWith(dateFilter))
     const totalRevenue = filtered.reduce((s, t) => s + t.total, 0)
+    const maxTransaction = filtered.reduce((max, t) => Math.max(max, t.total), 0)
+
+    // Calculate Best Seller for the current filtered date
+    const bestSeller = useLiveQuery(async () => {
+        if (!filtered.length) return null
+        const txnIds = filtered.map(t => t.id)
+        const items = await db.table('transaction_items')
+            .where('transactionId').anyOf(txnIds).toArray()
+
+        const counts = {}
+        for (const i of items) counts[i.name] = (counts[i.name] || 0) + i.qty
+
+        let bestName = null
+        let maxQty = 0
+        for (const [name, qty] of Object.entries(counts)) {
+            if (qty > maxQty) { maxQty = qty; bestName = name }
+        }
+        return bestName ? `${bestName} (${maxQty})` : '-'
+    }, [filtered.length]) // re-run when filtered txns change
 
     return (
         <div className="page">
@@ -51,18 +70,24 @@ export default function History() {
                 </div>
             </div>
 
-            {filtered.length > 0 && (
-                <div className="history-summary">
-                    <div className="summary-stat">
-                        <div className="summary-val">{filtered.length}</div>
-                        <div className="summary-lbl">Transaksi</div>
-                    </div>
-                    <div className="summary-stat">
-                        <div className="summary-val">{fmtCurrency(totalRevenue)}</div>
-                        <div className="summary-lbl">Total Pendapatan</div>
-                    </div>
+            <div className="history-summary">
+                <div className="summary-stat">
+                    <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Pendapatan {dateFilter === new Date().toISOString().split('T')[0] ? 'Hari Ini' : ''}</div>
+                    <div className="summary-val">{fmtCurrency(totalRevenue)}</div>
                 </div>
-            )}
+                <div className="summary-stat">
+                    <div className="summary-lbl">Total Transaksi</div>
+                    <div className="summary-val">{filtered.length}</div>
+                </div>
+                <div className="summary-stat">
+                    <div className="summary-lbl">Produk Terlaris</div>
+                    <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2 }}>{bestSeller || '-'}</div>
+                </div>
+                <div className="summary-stat">
+                    <div className="summary-lbl">Transaksi Terbesar</div>
+                    <div className="summary-val">{fmtCurrency(maxTransaction)}</div>
+                </div>
+            </div>
 
             <div className="page-body">
                 {filtered.length === 0 && (

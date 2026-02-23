@@ -1,3 +1,4 @@
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
@@ -5,6 +6,7 @@ import { showToast } from '../components/Toast.jsx'
 import db from '../db/db.js'
 import { exportBackup, importBackup } from '../utils/backup.js'
 import { connectPrinter, disconnectPrinter, getPrinterName, isPrinterConnected } from '../utils/bluetooth.js'
+import { fmtDateTime } from '../utils/format.js'
 import './Settings.css'
 
 export default function Settings() {
@@ -17,6 +19,10 @@ export default function Settings() {
     const [pendingImportFile, setPendingImportFile] = useState(null)
     const [showClearModal, setShowClearModal] = useState(false)
     const fileRef = useRef()
+
+    const backupRow = useLiveQuery(() => db.settings.get('lastBackupTime'), [])
+    const txnCount = useLiveQuery(() => db.transactions.count(), [])
+    const needsBackup = txnCount > 0 && (!backupRow || (Date.now() - new Date(backupRow.value).getTime() > 7 * 24 * 60 * 60 * 1000))
 
     useEffect(() => {
         db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
@@ -53,7 +59,10 @@ export default function Settings() {
     async function handleExport() {
         try {
             const saved = await exportBackup(storeName || 'My Store')
-            if (saved) showToast('Backup berhasil diunduh', 'success')
+            if (saved) {
+                await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
+                showToast('Backup berhasil diunduh', 'success')
+            }
         } catch (e) { showToast('Gagal export: ' + e.message, 'error') }
     }
 
@@ -145,8 +154,18 @@ export default function Settings() {
 
                     <section className="settings-card">
                         <h2><Icon name="backup" size={20} style={{ marginRight: 6 }} />Backup & Restore</h2>
+                        {needsBackup && (
+                            <div style={{ background: 'var(--danger, #ef4444)', color: '#fff', padding: '12px 16px', borderRadius: 'var(--r2)', marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <Icon name="warning" size={24} style={{ flexShrink: 0 }} />
+                                <div style={{ fontSize: '0.9rem', lineHeight: 1.4 }}>
+                                    <strong style={{ display: 'block', marginBottom: '4px' }}>Waktunya Backup Data!</strong>
+                                    Sudah lebih dari seminggu (atau belum pernah) sejak backup terakhir. Cegah kehilangan data penjualan Anda sekarang.
+                                </div>
+                            </div>
+                        )}
                         <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
-                            Export semua data ke file JSON. Import untuk restore.
+                            Export semua data ke file JSON. Import untuk restore.<br />
+                            {backupRow && <strong style={{ color: 'var(--text)' }}>Terakhir backup: {fmtDateTime(backupRow.value)}</strong>}
                         </p>
                         <div className="flex gap3">
                             <button id="export-btn" className="btn btn-primary" onClick={handleExport}>
