@@ -128,6 +128,14 @@ small {
   color: #fff;
 }
 
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+}
+
+.btn-warning:hover {
+  background: color-mix(in srgb, var(--warning) 85%, #000);
+}
 .btn-ghost {
   background: transparent;
   color: var(--text);

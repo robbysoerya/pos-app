@@ -89,9 +89,23 @@
 }
 
 .detail-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 12px;
-    font-size: 0.9rem;
+    display: flex;
+        justify-content: space-between;
     align-items: center;
+    font-size: 0.9rem;
+        padding: 4px 0;
+    }
+    
+    .detail-row> :first-child {
+        flex: 1;
+    }
+    
+    .detail-row> :nth-child(2) {
+        text-align: center;
+        min-width: 48px;
+        margin: 0 12px;
+    }
+    
+    .detail-row> :last-child {
+        text-align: right;
 }

@@ -7,7 +7,7 @@ import { showToast } from '../components/Toast.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import db from '../db/db.js'
 import { isPrinterConnected, printReceipt } from '../utils/bluetooth.js'
-import { fmtCurrency, fmtDateTime, parseAmount } from '../utils/format.js'
+import { fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../utils/format.js'
 import './POS.css'
 
 export default function POS() {
@@ -23,7 +23,15 @@ export default function POS() {
     const [newProductModal, setNewProductModal] = useState(null)
     const barcodeRef = useRef()
 
+    // Pay Later (Hutang) state
+    const [debtModal, setDebtModal] = useState(false)
+    const [debtSearch, setDebtSearch] = useState('')
+    const [newCustomerForm, setNewCustomerForm] = useState({ name: '', phone: '' })
+    const [showNewCustomer, setShowNewCustomer] = useState(false)
+    const [debtLoading, setDebtLoading] = useState(false)
+
     const categories = useLiveQuery(() => db.categories.toArray(), [])
+    const allCustomers = useLiveQuery(() => db.customers.toArray(), [])
     const products = useLiveQuery(
         async () => {
             let q = db.products
@@ -41,6 +49,12 @@ export default function POS() {
     const payment = parseAmount(paymentStr)
     const change = payment - total
     const canCheckout = items.length > 0 && payment >= total
+    const canDebt = items.length > 0
+
+    const filteredCustomers = (allCustomers || []).filter(c =>
+        c.name.toLowerCase().includes(debtSearch.toLowerCase()) ||
+        (c.phone || '').includes(debtSearch)
+    )
 
     async function handleBarcodeScan(e) {
         e.preventDefault()
@@ -131,6 +145,55 @@ export default function POS() {
             setCheckoutLoading(false)
         }
     }, [canCheckout, checkoutLoading, items, total, payment, change, clearCart])
+
+    const handleDebtCheckout = useCallback(async (customer) => {
+        if (!canDebt || debtLoading) return
+        setDebtLoading(true)
+        try {
+            const now = new Date().toISOString()
+            const txnItems = items.map(i => ({ productId: i.productId, name: i.name, price: i.price, qty: i.qty }))
+
+            let txnId
+            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items'), db.debts], async () => {
+                txnId = await db.transactions.add({
+                    createdAt: now, total, payment: 0, change: 0,
+                    itemCount: items.length, paymentType: 'debt',
+                })
+                for (const item of items) {
+                    if (typeof item.productId === 'string' && item.productId.startsWith('custom_')) continue
+                    await db.products.where('id').equals(item.productId).modify(p => {
+                        p.stock = Math.max(0, p.stock - item.qty)
+                    })
+                    await db.stock_movements.add({
+                        productId: item.productId, delta: -item.qty,
+                        reason: 'sale', createdAt: now, transactionId: txnId,
+                    })
+                }
+                for (const item of txnItems) {
+                    await db.table('transaction_items').add({ transactionId: txnId, ...item })
+                }
+                await db.debts.add({
+                    customerId: customer.id, transactionId: txnId,
+                    amount: total, paidAmount: 0,
+                    status: 'pending', createdAt: now,
+                })
+            })
+
+            const fullTxn = { id: txnId, createdAt: now, total, payment: 0, change: 0, items: txnItems, paymentType: 'debt', customerName: customer.name }
+            clearCart()
+            setPaymentStr('0')
+            setDebtModal(false)
+            setDebtSearch('')
+            setShowNewCustomer(false)
+            setNewCustomerForm({ name: '', phone: '' })
+            setReceiptModal(fullTxn)
+            showToast(`Hutang ${customer.name} dicatat!`, 'success')
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error')
+        } finally {
+            setDebtLoading(false)
+        }
+    }, [canDebt, debtLoading, items, total, clearCart])
 
     return (
         <div className="pos-layout">
@@ -291,6 +354,15 @@ export default function POS() {
                             <Icon name="refresh" size={18} /> Reset
                         </button>
                         <button
+                            className="btn btn-warning"
+                            style={{ flexShrink: 0 }}
+                            disabled={!canDebt || debtLoading}
+                            onClick={() => setDebtModal(true)}
+                            title="Catat sebagai hutang"
+                        >
+                            <Icon name="credit_score" size={20} /> Hutang
+                        </button>
+                        <button
                             id="checkout-btn"
                             className="btn btn-success btn-lg"
                             style={{ flex: 1 }}
@@ -422,6 +494,93 @@ export default function POS() {
             <Modal open={!!receiptModal} onClose={() => setReceiptModal(null)} title="Transaksi Berhasil" width="420px">
                 {receiptModal && <ReceiptPreview txn={receiptModal} onClose={() => setReceiptModal(null)} />}
             </Modal>
+
+            {/* ── Pay Later: Customer Picker Modal ── */}
+            <Modal open={debtModal} onClose={() => { setDebtModal(false); setDebtSearch(''); setShowNewCustomer(false); setNewCustomerForm({ name: '', phone: '' }) }} title="Pilih Pelanggan — Hutang" width="420px">
+                <div className="flex-col gap4">
+                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface2)', borderRadius: 'var(--r2)', padding: '0 10px', gap: '6px', border: '1px solid var(--border)' }}>
+                        <Icon name="search" size={18} style={{ color: 'var(--text3)' }} />
+                        <input
+                            className="search-input"
+                            style={{ padding: '8px 4px' }}
+                            placeholder="Cari nama / no HP..."
+                            autoFocus
+                            value={debtSearch}
+                            onChange={e => { setDebtSearch(e.target.value); setShowNewCustomer(false) }}
+                        />
+                    </div>
+
+                    <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {filteredCustomers.length === 0 && !showNewCustomer && (
+                            <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text3)', fontSize: '0.875rem' }}>
+                                Pelanggan tidak ditemukan
+                            </div>
+                        )}
+                        {filteredCustomers.map(c => (
+                            <button
+                                key={c.id}
+                                className="btn btn-ghost"
+                                style={{ justifyContent: 'flex-start', gap: '10px', padding: '10px 12px', textAlign: 'left' }}
+                                disabled={debtLoading}
+                                onClick={() => handleDebtCheckout(c)}
+                            >
+                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'color-mix(in srgb, var(--primary) 15%, transparent)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0 }}>
+                                    {c.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{c.name}</div>
+                                    {c.phone && <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>{c.phone}</div>}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {!showNewCustomer ? (
+                        <button className="btn btn-primary" onClick={() => setShowNewCustomer(true)}>
+                            <Icon name="person_add" size={18} /> Pelanggan Baru
+                        </button>
+                    ) : (
+                        <div className="flex-col gap4" style={{ background: 'var(--surface2)', borderRadius: 'var(--r2)', padding: '12px', border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text2)' }}>Tambah Pelanggan Baru</div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Nama <span style={{ color: 'var(--danger)' }}>*</span></label>
+                                <input
+                                    className="input"
+                                    placeholder="Nama pelanggan"
+                                    autoFocus
+                                    value={newCustomerForm.name}
+                                    onChange={e => setNewCustomerForm(f => ({ ...f, name: e.target.value }))}
+                                />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>No. HP</label>
+                                <input
+                                    className="input"
+                                    placeholder="08xx..."
+                                    type="tel"
+                                    value={newCustomerForm.phone}
+                                    onChange={e => setNewCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                                />
+                            </div>
+                            <div className="flex gap3">
+                                <button className="btn btn-ghost" onClick={() => setShowNewCustomer(false)}>Batal</button>
+                                <button
+                                    className="btn btn-success btn-block"
+                                    disabled={!newCustomerForm.name.trim() || debtLoading}
+                                    onClick={async () => {
+                                        try {
+                                            const id = await db.customers.add({ name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
+                                            await handleDebtCheckout({ id, name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
+                                        } catch (e) { showToast('Error: ' + e.message, 'error') }
+                                    }}
+                                >
+                                    <Icon name="credit_score" size={18} /> Simpan & Catat Hutang
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     )
 }
@@ -440,7 +599,16 @@ function ReceiptPreview({ txn, onClose }) {
 
     return (
         <div className="receipt-preview">
+            {txn.paymentType === 'debt' && (
+                <div style={{ background: 'color-mix(in srgb, var(--danger,#ef4444) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger,#ef4444) 30%, transparent)', borderRadius: 'var(--r2)', padding: '8px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Icon name="credit_score" size={18} style={{ color: 'var(--danger,#ef4444)' }} />
+                    <span style={{ fontWeight: 700, color: 'var(--danger,#ef4444)', fontSize: '0.875rem' }}>
+                        HUTANG — {txn.customerName}
+                    </span>
+                </div>
+            )}
             <div className="receipt-row"><span>Waktu</span><span>{fmtDateTime(txn.createdAt)}</span></div>
+            <div className="receipt-row"><span>No. Transaksi</span><span>{fmtTxnId(txn.id)}</span></div>
             <div className="divider" />
             {txn.items.map((item, i) => (
                 <div key={i} className="receipt-row">
@@ -450,8 +618,16 @@ function ReceiptPreview({ txn, onClose }) {
             ))}
             <div className="divider" />
             <div className="receipt-row font-bold"><span>Total</span><span>{fmtCurrency(txn.total)}</span></div>
-            <div className="receipt-row"><span>Bayar</span><span>{fmtCurrency(txn.payment)}</span></div>
-            <div className="receipt-row text-success"><span>Kembalian</span><span>{fmtCurrency(txn.change)}</span></div>
+            {txn.paymentType === 'debt' ? (
+                <div className="receipt-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
+                    <span>Status</span><span>Belum Dibayar (Hutang)</span>
+                </div>
+            ) : (
+                <>
+                        <div className="receipt-row"><span>Bayar</span><span>{fmtCurrency(txn.payment)}</span></div>
+                        <div className="receipt-row text-success"><span>Kembalian</span><span>{fmtCurrency(txn.change)}</span></div>
+                </>
+            )}
             <div className="flex gap3 mt4">
                 <button className="btn btn-ghost" onClick={handleReprint}>
                     <Icon name="print" size={18} /> Cetak

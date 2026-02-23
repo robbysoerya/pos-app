@@ -17,7 +17,15 @@ export default function History() {
 
     async function openDetail(txn) {
         const items = await db.table('transaction_items').where('transactionId').equals(txn.id).toArray()
-        setDetail({ txn: { ...txn, items }, items })
+        let customerName = null
+        if (txn.paymentType === 'debt') {
+            const debt = await db.debts.where('transactionId').equals(txn.id).first()
+            if (debt) {
+                const customer = await db.customers.get(debt.customerId)
+                customerName = customer?.name || 'Pelanggan'
+            }
+        }
+        setDetail({ txn: { ...txn, items, customerName }, items })
     }
 
     async function handleReprint(txn) {
@@ -32,7 +40,22 @@ export default function History() {
     }
 
     const filtered = (transactions || []).filter(txn => !dateFilter || txn.createdAt.startsWith(dateFilter))
-    const totalRevenue = filtered.reduce((s, t) => s + t.total, 0)
+
+    // Revenue = cash txn totals + debt_payments received in that date range
+    const totalRevenue = useLiveQuery(async () => {
+        const cashTotal = filtered
+            .filter(t => t.paymentType !== 'debt')
+            .reduce((s, t) => s + t.total, 0)
+
+        // Sum all debt payments
+        const allPayments = await db.debt_payments.toArray()
+        const debtPaymentsTotal = allPayments
+            .filter(p => !dateFilter || p.createdAt.startsWith(dateFilter))
+            .reduce((s, p) => s + p.amount, 0)
+
+        return cashTotal + debtPaymentsTotal
+    }, [filtered.length, dateFilter])
+
     const maxTransaction = filtered.reduce((max, t) => Math.max(max, t.total), 0)
 
     // Calculate Best Seller for the current filtered date
@@ -73,7 +96,7 @@ export default function History() {
             <div className="history-summary">
                 <div className="summary-stat">
                     <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Pendapatan {dateFilter === new Date().toISOString().split('T')[0] ? 'Hari Ini' : ''}</div>
-                    <div className="summary-val">{fmtCurrency(totalRevenue)}</div>
+                    <div className="summary-val">{fmtCurrency(totalRevenue ?? 0)}</div>
                 </div>
                 <div className="summary-stat">
                     <div className="summary-lbl">Total Transaksi</div>
@@ -99,7 +122,12 @@ export default function History() {
                 <div className="txn-list">
                     {filtered.map(txn => (
                         <button key={txn.id} className="txn-card" onClick={() => openDetail(txn)}>
-                            <div className="txn-id">{fmtTxnId(txn.id)}</div>
+                            <div className="txn-id">
+                                {fmtTxnId(txn.id)}
+                                {txn.paymentType === 'debt' && (
+                                    <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.65rem' }}>HUTANG</span>
+                                )}
+                            </div>
                             <div className="txn-meta">
                                 <span>{fmtDateTime(txn.createdAt)}</span>
                                 <span className="text2">{txn.itemCount} item</span>
@@ -114,6 +142,14 @@ export default function History() {
             <Modal open={!!detail} onClose={() => setDetail(null)} title={`Detail ${detail ? fmtTxnId(detail.txn.id) : ''}`} width="480px">
                 {detail && (
                     <div className="txn-detail">
+                        {detail.txn.paymentType === 'debt' && (
+                            <div style={{ background: 'color-mix(in srgb, var(--danger,#ef4444) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger,#ef4444) 30%, transparent)', borderRadius: 'var(--r2)', padding: '8px 12px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Icon name="credit_score" size={18} style={{ color: 'var(--danger,#ef4444)' }} />
+                                <span style={{ fontWeight: 700, color: 'var(--danger,#ef4444)', fontSize: '0.875rem' }}>
+                                    HUTANG — {detail.txn.customerName || 'Pelanggan'}
+                                </span>
+                            </div>
+                        )}
                         <div className="flex justify-between text2 mb4">
                             <span>{fmtDateTime(detail.txn.createdAt)}</span>
                             <span>{detail.items.length} item</span>
@@ -128,8 +164,16 @@ export default function History() {
                         ))}
                         <div className="divider" />
                         <div className="detail-row font-bold"><span>Total</span><span /><span>{fmtCurrency(detail.txn.total)}</span></div>
-                        <div className="detail-row"><span>Bayar</span><span /><span>{fmtCurrency(detail.txn.payment)}</span></div>
-                        <div className="detail-row text-success"><span>Kembalian</span><span /><span>{fmtCurrency(detail.txn.change)}</span></div>
+                        {detail.txn.paymentType === 'debt' ? (
+                            <div className="detail-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
+                                <span>Status</span><span /><span>Belum Dibayar (Hutang)</span>
+                            </div>
+                        ) : (
+                            <>
+                                    <div className="detail-row"><span>Bayar</span><span /><span>{fmtCurrency(detail.txn.payment)}</span></div>
+                                    <div className="detail-row text-success"><span>Kembalian</span><span /><span>{fmtCurrency(detail.txn.change)}</span></div>
+                            </>
+                        )}
                         <div className="flex gap3 mt4">
                             <button className="btn btn-ghost" onClick={() => handleReprint(detail.txn)}>
                                 <Icon name="print" size={18} /> Cetak Ulang
