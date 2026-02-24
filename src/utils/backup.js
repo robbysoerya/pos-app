@@ -2,20 +2,23 @@ import db from '../db/db.js'
 
 /** Gather all database tables into a JSON string and filename */
 export async function getBackupData(storeName = 'My Store') {
-    const [categories, products, transactions, transaction_items, stock_movements, settings] = await Promise.all([
+    const [categories, products, transactions, transaction_items, stock_movements, settings, customers, debts, debt_payments] = await Promise.all([
         db.categories.toArray(),
         db.products.toArray(),
         db.transactions.toArray(),
         db.transaction_items.toArray(),
         db.stock_movements.toArray(),
         db.settings.toArray(),
+        db.customers?.toArray() || [],
+        db.debts?.toArray() || [],
+        db.debt_payments?.toArray() || [],
     ])
 
     const backup = {
         version: 1,
         exportedAt: new Date().toISOString(),
         storeName,
-        data: { categories, products, transactions, transaction_items, stock_movements, settings },
+        data: { categories, products, transactions, transaction_items, stock_movements, settings, customers, debts, debt_payments },
     }
 
     const filename = `pos-backup-${new Date().toISOString().split('T')[0]}.json`
@@ -88,11 +91,12 @@ export async function importBackup(file) {
     const backup = JSON.parse(text)
 
     if (!backup.data) throw new Error('Invalid backup file format')
-    const { categories, products, transactions, transaction_items, stock_movements, settings } = backup.data
+    const { categories, products, transactions, transaction_items, stock_movements, settings, customers, debts, debt_payments } = backup.data
 
     await db.transaction('rw', [
         db.categories, db.products, db.transactions,
-        db.transaction_items, db.stock_movements, db.settings
+        db.transaction_items, db.stock_movements, db.settings,
+        db.customers, db.debts, db.debt_payments
     ], async () => {
         await db.categories.clear()
         await db.products.clear()
@@ -100,6 +104,9 @@ export async function importBackup(file) {
         await db.transaction_items.clear()
         await db.stock_movements.clear()
         await db.settings.clear()
+        if (db.customers) await db.customers.clear()
+        if (db.debts) await db.debts.clear()
+        if (db.debt_payments) await db.debt_payments.clear()
 
         if (categories?.length) await db.categories.bulkAdd(categories)
         if (products?.length) await db.products.bulkAdd(products)
@@ -107,6 +114,9 @@ export async function importBackup(file) {
         if (transaction_items?.length) await db.transaction_items.bulkAdd(transaction_items)
         if (stock_movements?.length) await db.stock_movements.bulkAdd(stock_movements)
         if (settings?.length) await db.settings.bulkAdd(settings)
+        if (customers?.length && db.customers) await db.customers.bulkAdd(customers)
+        if (debts?.length && db.debts) await db.debts.bulkAdd(debts)
+        if (debt_payments?.length && db.debt_payments) await db.debt_payments.bulkAdd(debt_payments)
     })
 
     return backup

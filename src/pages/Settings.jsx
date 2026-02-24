@@ -133,10 +133,14 @@ export default function Settings() {
 
     async function confirmClearAll() {
         setShowClearModal(false)
-        await db.transaction('rw', [db.categories, db.products, db.transactions, db.table('transaction_items'), db.stock_movements, db.settings], async () => {
+        await db.transaction('rw', [
+            db.categories, db.products, db.transactions, db.table('transaction_items'),
+            db.stock_movements, db.settings, db.customers, db.debts, db.debt_payments
+        ], async () => {
             await db.categories.clear(); await db.products.clear()
             await db.transactions.clear(); await db.table('transaction_items').clear()
             await db.stock_movements.clear(); await db.settings.clear()
+            await db.customers.clear(); await db.debts.clear(); await db.debt_payments.clear()
         })
         showToast('Semua data dihapus', 'info'); setStoreName('')
     }
