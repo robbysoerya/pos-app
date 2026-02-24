@@ -1,7 +1,7 @@
 import db from '../db/db.js'
 
-/** Export all tables to a JSON blob and trigger download */
-export async function exportBackup(storeName = 'My Store') {
+/** Gather all database tables into a JSON string and filename */
+export async function getBackupData(storeName = 'My Store') {
     const [categories, products, transactions, transaction_items, stock_movements, settings] = await Promise.all([
         db.categories.toArray(),
         db.products.toArray(),
@@ -20,6 +20,12 @@ export async function exportBackup(storeName = 'My Store') {
 
     const filename = `pos-backup-${new Date().toISOString().split('T')[0]}.json`
     const json = JSON.stringify(backup, null, 2)
+    return { json, filename }
+}
+
+/** Export all tables to a JSON blob and trigger download */
+export async function exportBackup(storeName = 'My Store') {
+    const { json, filename } = await getBackupData(storeName)
 
     // Chrome 86+: use File System Access API — shows a proper "Save As" dialog
     // and avoids all blob URL async restrictions that cause random UUID filenames.
@@ -49,6 +55,30 @@ export async function exportBackup(storeName = 'My Store') {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
+    return true
+}
+
+/** Sends the backup JSON file directly to a Telegram Bot */
+export async function sendBackupToTelegram(token, chatId, storeName = 'My Store') {
+    if (!token || !chatId) throw new Error('Telegram Token dan Chat ID wajib diisi')
+
+    const { json, filename } = await getBackupData(storeName)
+    const blob = new Blob([json], { type: 'application/json' })
+
+    const formData = new FormData()
+    formData.append('chat_id', chatId)
+    formData.append('document', blob, filename)
+    formData.append('caption', `📦 Backup POS ${storeName}\n📅 ${new Date().toLocaleString()}`)
+
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+        method: 'POST',
+        body: formData
+    })
+
+    const result = await response.json()
+    if (!result.ok) {
+        throw new Error(result.description || 'Gagal mengirim ke Telegram API')
+    }
     return true
 }
 

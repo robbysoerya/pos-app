@@ -16,6 +16,8 @@ export default function POS() {
     const [paymentStr, setPaymentStr] = useState('0')
     const [checkoutLoading, setCheckoutLoading] = useState(false)
     const [receiptModal, setReceiptModal] = useState(null)
+    const [confirmBayarModal, setConfirmBayarModal] = useState(false)
+    const [confirmResetModal, setConfirmResetModal] = useState(false)
     const [barcodeInput, setBarcodeInput] = useState('')
     const [searchInput, setSearchInput] = useState('')
     const [customModal, setCustomModal] = useState(false)
@@ -28,6 +30,7 @@ export default function POS() {
     const [debtSearch, setDebtSearch] = useState('')
     const [newCustomerForm, setNewCustomerForm] = useState({ name: '', phone: '' })
     const [showNewCustomer, setShowNewCustomer] = useState(false)
+    const [confirmDebtCustomer, setConfirmDebtCustomer] = useState(null)
     const [debtLoading, setDebtLoading] = useState(false)
 
     const categories = useLiveQuery(() => db.categories.toArray(), [])
@@ -135,6 +138,7 @@ export default function POS() {
             const fullTxn = { id: txnId, createdAt: now, total, payment, change, items: txnItems }
             clearCart()
             setPaymentStr('0')
+            setConfirmBayarModal(false)
             setReceiptModal(fullTxn)
 
 
@@ -154,9 +158,9 @@ export default function POS() {
             const txnItems = items.map(i => ({ productId: i.productId, name: i.name, price: i.price, qty: i.qty }))
 
             let txnId
-            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items'), db.debts], async () => {
+            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items'), db.debts, db.debt_payments], async () => {
                 txnId = await db.transactions.add({
-                    createdAt: now, total, payment: 0, change: 0,
+                    createdAt: now, total, payment, change: 0,
                     itemCount: items.length, paymentType: 'debt',
                 })
                 for (const item of items) {
@@ -172,17 +176,24 @@ export default function POS() {
                 for (const item of txnItems) {
                     await db.table('transaction_items').add({ transactionId: txnId, ...item })
                 }
-                await db.debts.add({
+                const newDebtId = await db.debts.add({
                     customerId: customer.id, transactionId: txnId,
-                    amount: total, paidAmount: 0,
-                    status: 'pending', createdAt: now,
+                    amount: total, paidAmount: payment,
+                    status: payment > 0 ? 'partial' : 'pending', createdAt: now,
                 })
+                if (payment > 0) {
+                    await db.debt_payments.add({
+                        debtId: newDebtId, amount: payment,
+                        note: 'DP / Bayar Sebagian', createdAt: now
+                    })
+                }
             })
 
-            const fullTxn = { id: txnId, createdAt: now, total, payment: 0, change: 0, items: txnItems, paymentType: 'debt', customerName: customer.name }
+            const fullTxn = { id: txnId, createdAt: now, total, payment, change: 0, items: txnItems, paymentType: 'debt', customerName: customer.name }
             clearCart()
             setPaymentStr('0')
             setDebtModal(false)
+            setConfirmDebtCustomer(null)
             setDebtSearch('')
             setShowNewCustomer(false)
             setNewCustomerForm({ name: '', phone: '' })
@@ -193,7 +204,7 @@ export default function POS() {
         } finally {
             setDebtLoading(false)
         }
-    }, [canDebt, debtLoading, items, total, clearCart])
+    }, [canDebt, debtLoading, items, total, payment, clearCart])
 
     return (
         <div className="pos-layout">
@@ -350,7 +361,11 @@ export default function POS() {
                     />
 
                     <div className="checkout-actions">
-                        <button className="btn btn-ghost" onClick={() => { clearCart(); setPaymentStr('0') }}>
+                        <button
+                            className="btn btn-ghost"
+                            onClick={() => setConfirmResetModal(true)}
+                            disabled={items.length === 0 && paymentStr === '0'}
+                        >
                             <Icon name="refresh" size={18} /> Reset
                         </button>
                         <button
@@ -367,7 +382,7 @@ export default function POS() {
                             className="btn btn-success btn-lg"
                             style={{ flex: 1 }}
                             disabled={!canCheckout || checkoutLoading}
-                            onClick={handleCheckout}
+                            onClick={() => setConfirmBayarModal(true)}
                         >
                             {checkoutLoading
                                 ? <><Icon name="hourglass_top" size={20} /> Proses...</>
@@ -522,7 +537,7 @@ export default function POS() {
                                 className="btn btn-ghost"
                                 style={{ justifyContent: 'flex-start', gap: '10px', padding: '10px 12px', textAlign: 'left' }}
                                 disabled={debtLoading}
-                                onClick={() => handleDebtCheckout(c)}
+                                onClick={() => setConfirmDebtCustomer(c)}
                             >
                                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'color-mix(in srgb, var(--primary) 15%, transparent)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flexShrink: 0 }}>
                                     {c.name.charAt(0).toUpperCase()}
@@ -568,17 +583,106 @@ export default function POS() {
                                     className="btn btn-success btn-block"
                                     disabled={!newCustomerForm.name.trim() || debtLoading}
                                     onClick={async () => {
+                                        if (!newCustomerForm.name.trim() || debtLoading) return
                                         try {
                                             const id = await db.customers.add({ name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
-                                            await handleDebtCheckout({ id, name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
+                                            setConfirmDebtCustomer({ id, name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
                                         } catch (e) { showToast('Error: ' + e.message, 'error') }
                                     }}
                                 >
-                                    <Icon name="credit_score" size={18} /> Simpan & Catat Hutang
+                                        <Icon name="credit_score" size={18} /> Simpan & Lanjut
                                 </button>
                             </div>
                         </div>
                     )}
+                </div>
+            </Modal>
+
+            <Modal open={!!confirmDebtCustomer} onClose={() => setConfirmDebtCustomer(null)} title="Konfirmasi Hutang" width="400px">
+                <div className="flex-col gap4">
+                    <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text2)', marginBottom: '4px' }}>Catat Hutang Untuk</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--danger)' }}>{confirmDebtCustomer?.name}</div>
+                    </div>
+                    <div style={{ background: 'var(--surface2)', padding: '12px', borderRadius: 'var(--r2)', border: '1px solid var(--border)' }}>
+                        <div className="flex justify-between mb2">
+                            <span className="text2">Total Belanja</span>
+                            <span className="font-bold">{fmtCurrency(total)}</span>
+                        </div>
+                        {payment > 0 && (
+                            <div className="flex justify-between mb2">
+                                <span className="text2">Dibayar Awal (DP)</span>
+                                <span className="font-bold">{fmtCurrency(payment)}</span>
+                            </div>
+                        )}
+                        <div className="divider" />
+                        <div className="flex justify-between">
+                            <span style={{ fontWeight: 600 }}>Total Hutang</span>
+                            <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtCurrency(total - payment)}</span>
+                        </div>
+                    </div>
+                    <div className="flex gap3 mt2">
+                        <button className="btn btn-ghost" onClick={() => setConfirmDebtCustomer(null)}>Batal</button>
+                        <button
+                            className="btn btn-warning btn-block"
+                            disabled={debtLoading}
+                            onClick={() => handleDebtCheckout(confirmDebtCustomer)}
+                        >
+                            {debtLoading ? 'Proses...' : <><Icon name="check" size={18} /> Ya, Catat Hutang</>}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={confirmBayarModal} onClose={() => setConfirmBayarModal(false)} title="Konfirmasi Pembayaran" width="400px">
+                <div className="flex-col gap4">
+                    <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text2)', marginBottom: '4px' }}>Total Dibayar</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--success)' }}>{fmtCurrency(payment)}</div>
+                    </div>
+                    <div style={{ background: 'var(--surface2)', padding: '12px', borderRadius: 'var(--r2)', border: '1px solid var(--border)' }}>
+                        <div className="flex justify-between mb2">
+                            <span className="text2">Total Belanja</span>
+                            <span className="font-bold">{fmtCurrency(total)}</span>
+                        </div>
+                        <div className="divider" />
+                        <div className="flex justify-between">
+                            <span style={{ fontWeight: 600 }}>Kembalian</span>
+                            <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{fmtCurrency(change)}</span>
+                        </div>
+                    </div>
+                    <div className="flex gap3 mt2">
+                        <button className="btn btn-ghost" onClick={() => setConfirmBayarModal(false)}>Batal</button>
+                        <button
+                            className="btn btn-success btn-block"
+                            disabled={checkoutLoading}
+                            onClick={handleCheckout}
+                        >
+                            {checkoutLoading ? 'Proses...' : <><Icon name="check" size={18} /> Konfirmasi Pembayaran</>}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={confirmResetModal} onClose={() => setConfirmResetModal(false)} title="Konfirmasi Reset" width="360px">
+                <div className="flex-col gap4 text-center">
+                    <Icon name="warning" size={48} style={{ color: 'var(--warning)', margin: '0 auto' }} />
+                    <p style={{ margin: '8px 0', fontSize: '1rem' }}>
+                        Apakah Anda yakin ingin mengosongkan keranjang?
+                    </p>
+                    <div className="flex gap3 mt2">
+                        <button className="btn btn-ghost" onClick={() => setConfirmResetModal(false)}>Batal</button>
+                        <button
+                            className="btn btn-danger btn-block"
+                            onClick={() => {
+                                clearCart()
+                                setPaymentStr('0')
+                                setConfirmResetModal(false)
+                            }}
+                        >
+                            <Icon name="delete" size={18} /> Ya, Kosongkan
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </div>
@@ -611,17 +715,23 @@ function ReceiptPreview({ txn, onClose }) {
             <div className="receipt-row"><span>No. Transaksi</span><span>{fmtTxnId(txn.id)}</span></div>
             <div className="divider" />
             {txn.items.map((item, i) => (
-                <div key={i} className="receipt-row">
-                    <span>{item.name} x{item.qty}</span>
-                    <span>{fmtCurrency(item.price * item.qty)}</span>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '4px 0', fontSize: '0.9rem' }}>
+                    <span style={{ flex: 1 }}>{item.name}</span>
+                    <span className="text2" style={{ textAlign: 'center', minWidth: '48px', margin: '0 12px' }}>x{item.qty}</span>
+                    <span style={{ textAlign: 'right' }}>{fmtCurrency(item.price * item.qty)}</span>
                 </div>
             ))}
             <div className="divider" />
             <div className="receipt-row font-bold"><span>Total</span><span>{fmtCurrency(txn.total)}</span></div>
             {txn.paymentType === 'debt' ? (
-                <div className="receipt-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
-                    <span>Status</span><span>Belum Dibayar (Hutang)</span>
-                </div>
+                <>
+                    {txn.payment > 0 && (
+                        <div className="receipt-row"><span>Dibayar (DP)</span><span>{fmtCurrency(txn.payment)}</span></div>
+                    )}
+                    <div className="receipt-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
+                        <span>Status</span><span>Sisa {fmtCurrency(txn.total - txn.payment)} (Hutang)</span>
+                    </div>
+                </>
             ) : (
                 <>
                         <div className="receipt-row"><span>Bayar</span><span>{fmtCurrency(txn.payment)}</span></div>

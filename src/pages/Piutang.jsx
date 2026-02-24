@@ -503,10 +503,18 @@ export default function Piutang() {
                             <span>{fmtCurrency(txnDetail.txn.total)}</span>
                         </div>
                         {txnDetail.txn.paymentType === 'debt' ? (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--danger,#ef4444)', fontWeight: 600, padding: '4px 0' }}>
-                                <span>Status</span>
-                                <span>Belum Dibayar (Hutang)</span>
-                            </div>
+                            <>
+                                {txnDetail.txn.payment > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                        <span>Dibayar (DP)</span>
+                                        <span>{fmtCurrency(txnDetail.txn.payment)}</span>
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--danger,#ef4444)', fontWeight: 600, padding: '4px 0' }}>
+                                    <span>Status</span>
+                                    <span>Sisa {fmtCurrency(txnDetail.txn.total - txnDetail.txn.payment)} (Hutang)</span>
+                                </div>
+                            </>
                         ) : (
                             <>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>

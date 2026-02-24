@@ -163,15 +163,38 @@ export default function History() {
                             </div>
                         ))}
                         <div className="divider" />
-                        <div className="detail-row font-bold"><span>Total</span><span /><span>{fmtCurrency(detail.txn.total)}</span></div>
+                        <div className="detail-row font-bold">
+                            <span>Total</span>
+                            <span />
+                            <span>{fmtCurrency(detail.txn.total)}</span>
+                        </div>
                         {detail.txn.paymentType === 'debt' ? (
-                            <div className="detail-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
-                                <span>Status</span><span /><span>Belum Dibayar (Hutang)</span>
-                            </div>
+                            <>
+                                {detail.txn.payment > 0 && (
+                                    <div className="detail-row">
+                                        <span>Dibayar (DP)</span>
+                                        <span />
+                                        <span>{fmtCurrency(detail.txn.payment)}</span>
+                                    </div>
+                                )}
+                                <div className="detail-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
+                                    <span>Status</span>
+                                    <span />
+                                    <span>Sisa {fmtCurrency(detail.txn.total - detail.txn.payment)} (Hutang)</span>
+                                </div>
+                            </>
                         ) : (
                             <>
-                                    <div className="detail-row"><span>Bayar</span><span /><span>{fmtCurrency(detail.txn.payment)}</span></div>
-                                    <div className="detail-row text-success"><span>Kembalian</span><span /><span>{fmtCurrency(detail.txn.change)}</span></div>
+                                    <div className="detail-row">
+                                        <span>Bayar</span>
+                                        <span />
+                                        <span>{fmtCurrency(detail.txn.payment)}</span>
+                                    </div>
+                                    <div className="detail-row text-success">
+                                        <span>Kembalian</span>
+                                        <span />
+                                        <span>{fmtCurrency(detail.txn.change)}</span>
+                                    </div>
                             </>
                         )}
                         <div className="flex gap3 mt4">

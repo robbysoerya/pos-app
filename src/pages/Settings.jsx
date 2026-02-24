@@ -4,17 +4,20 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { showToast } from '../components/Toast.jsx'
 import db from '../db/db.js'
-import { exportBackup, importBackup } from '../utils/backup.js'
+import { exportBackup, importBackup, sendBackupToTelegram } from '../utils/backup.js'
 import { connectPrinter, disconnectPrinter, getPrinterName, isPrinterConnected } from '../utils/bluetooth.js'
 import { fmtDateTime } from '../utils/format.js'
 import './Settings.css'
 
 export default function Settings() {
     const [storeName, setStoreName] = useState('')
+    const [telegramToken, setTelegramToken] = useState('')
+    const [telegramChatId, setTelegramChatId] = useState('')
     const [printerName, setPrinterName] = useState(getPrinterName())
     const [printerConnected, setPrinterConnected] = useState(isPrinterConnected())
     const [connecting, setConnecting] = useState(false)
     const [restoring, setRestoring] = useState(false)
+    const [sendingTelegram, setSendingTelegram] = useState(false)
     const [deferredPrompt, setDeferredPrompt] = useState(null)
     const [pendingImportFile, setPendingImportFile] = useState(null)
     const [showClearModal, setShowClearModal] = useState(false)
@@ -26,6 +29,8 @@ export default function Settings() {
 
     useEffect(() => {
         db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
+        db.settings.get('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
+        db.settings.get('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
     }, [])
 
     useEffect(() => {
@@ -37,6 +42,12 @@ export default function Settings() {
     async function saveStoreName() {
         await db.settings.put({ key: 'storeName', value: storeName.trim() || 'My Store' })
         showToast('Nama toko disimpan', 'success')
+    }
+
+    async function saveTelegramConfig() {
+        await db.settings.put({ key: 'telegramToken', value: telegramToken.trim() })
+        await db.settings.put({ key: 'telegramChatId', value: telegramChatId.trim() })
+        showToast('Pengaturan Telegram disimpan', 'success')
     }
 
     async function handleConnect() {
@@ -64,6 +75,22 @@ export default function Settings() {
                 showToast('Backup berhasil diunduh', 'success')
             }
         } catch (e) { showToast('Gagal export: ' + e.message, 'error') }
+    }
+
+    async function handleTelegramBackup() {
+        if (!telegramToken || !telegramChatId) {
+            return showToast('Isi Token & Chat ID Telegram dulu', 'warning')
+        }
+        setSendingTelegram(true)
+        try {
+            await sendBackupToTelegram(telegramToken, telegramChatId, storeName || 'My Store')
+            await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
+            showToast('Backup berhasil dikirim ke Telegram', 'success')
+        } catch (e) {
+            showToast(e.message, 'error')
+        } finally {
+            setSendingTelegram(false)
+        }
     }
 
     function handleImport(e) {
@@ -119,7 +146,7 @@ export default function Settings() {
 
                     <section className="settings-card">
                         <h2><Icon name="storefront" size={20} style={{ marginRight: 6 }} />Nama Toko</h2>
-                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di header struk cetak.</p>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di header struk.</p>
                         <div className="flex gap3">
                             <input id="store-name-input" className="input" placeholder="My Store"
                                 value={storeName} onChange={e => setStoreName(e.target.value)}
@@ -167,14 +194,59 @@ export default function Settings() {
                             Export semua data ke file JSON. Import untuk restore.<br />
                             {backupRow && <strong style={{ color: 'var(--text)' }}>Terakhir backup: {fmtDateTime(backupRow.value)}</strong>}
                         </p>
-                        <div className="flex gap3">
+                        <div className="flex gap3 flex-wrap">
                             <button id="export-btn" className="btn btn-primary" onClick={handleExport}>
                                 <Icon name="download" size={18} /> Export Backup
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleTelegramBackup}
+                                disabled={sendingTelegram || !telegramToken || !telegramChatId}
+                                style={{
+                                    background: 'var(--success, #10b981)',
+                                    borderColor: 'var(--success, #10b981)'
+                                }}
+                            >
+                                <Icon name={sendingTelegram ? "hourglass_top" : "send"} size={18} />
+                                {sendingTelegram ? 'Mengirim...' : 'Kirim ke Telegram'}
                             </button>
                             <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
                                 <Icon name="upload" size={18} /> {restoring ? 'Restoring...' : 'Import Restore'}
                                 <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
                             </label>
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="send" size={20} style={{ marginRight: 6 }} />Integrasi Telegram</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Atur bot untuk menerima file backup otomatis dengan tombol di atas.</p>
+
+                        <div className="flex-col gap3">
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Bot Token</label>
+                                <input
+                                    className="input"
+                                    type="password"
+                                    placeholder="e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                                    value={telegramToken}
+                                    onChange={e => setTelegramToken(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>Chat ID</label>
+                                <input
+                                    className="input"
+                                    type="password"
+                                    placeholder="e.g. 123456789"
+                                    value={telegramChatId}
+                                    onChange={e => setTelegramChatId(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && saveTelegramConfig()}
+                                />
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text3)', marginTop: '4px' }}>Dapatkan dari @userinfobot atau sejenisnya.</div>
+                            </div>
+                            <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={saveTelegramConfig}>
+                                <Icon name="save" size={18} /> Simpan Telegram
+                            </button>
                         </div>
                     </section>
 
