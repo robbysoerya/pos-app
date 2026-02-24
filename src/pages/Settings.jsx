@@ -21,6 +21,8 @@ export default function Settings() {
     const [deferredPrompt, setDeferredPrompt] = useState(null)
     const [pendingImportFile, setPendingImportFile] = useState(null)
     const [showClearModal, setShowClearModal] = useState(false)
+    const [showExportFallbackModal, setShowExportFallbackModal] = useState(false)
+    const [exportErrorMsg, setExportErrorMsg] = useState('')
     const fileRef = useRef()
 
     const backupRow = useLiveQuery(() => db.settings.get('lastBackupTime'), [])
@@ -68,6 +70,25 @@ export default function Settings() {
     }
 
     async function handleExport() {
+        if (telegramToken && telegramChatId) {
+            setSendingTelegram(true)
+            try {
+                await sendBackupToTelegram(telegramToken, telegramChatId, storeName || 'My Store')
+                await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
+                showToast('Backup berhasil dikirim ke Telegram', 'success')
+            } catch (e) {
+                setExportErrorMsg(e.message)
+                setShowExportFallbackModal(true)
+            } finally {
+                setSendingTelegram(false)
+            }
+        } else {
+            await executeManualExport()
+        }
+    }
+
+    async function executeManualExport() {
+        setShowExportFallbackModal(false)
         try {
             const saved = await exportBackup(storeName || 'My Store')
             if (saved) {
@@ -75,22 +96,6 @@ export default function Settings() {
                 showToast('Backup berhasil diunduh', 'success')
             }
         } catch (e) { showToast('Gagal export: ' + e.message, 'error') }
-    }
-
-    async function handleTelegramBackup() {
-        if (!telegramToken || !telegramChatId) {
-            return showToast('Isi Token & Chat ID Telegram dulu', 'warning')
-        }
-        setSendingTelegram(true)
-        try {
-            await sendBackupToTelegram(telegramToken, telegramChatId, storeName || 'My Store')
-            await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
-            showToast('Backup berhasil dikirim ke Telegram', 'success')
-        } catch (e) {
-            showToast(e.message, 'error')
-        } finally {
-            setSendingTelegram(false)
-        }
     }
 
     function handleImport(e) {
@@ -195,20 +200,14 @@ export default function Settings() {
                             {backupRow && <strong style={{ color: 'var(--text)' }}>Terakhir backup: {fmtDateTime(backupRow.value)}</strong>}
                         </p>
                         <div className="flex gap3 flex-wrap">
-                            <button id="export-btn" className="btn btn-primary" onClick={handleExport}>
-                                <Icon name="download" size={18} /> Export Backup
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleTelegramBackup}
-                                disabled={sendingTelegram || !telegramToken || !telegramChatId}
-                                style={{
-                                    background: 'var(--success, #10b981)',
-                                    borderColor: 'var(--success, #10b981)'
-                                }}
+                            <button 
+                                id="export-btn" 
+                                className="btn btn-primary" 
+                                onClick={handleExport}
+                                disabled={sendingTelegram}
                             >
-                                <Icon name={sendingTelegram ? "hourglass_top" : "send"} size={18} />
-                                {sendingTelegram ? 'Mengirim...' : 'Kirim ke Telegram'}
+                                <Icon name={sendingTelegram ? "hourglass_top" : "download"} size={18} />
+                                {sendingTelegram ? 'Mengirim Telegram...' : 'Export Backup'}
                             </button>
                             <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
                                 <Icon name="upload" size={18} /> {restoring ? 'Restoring...' : 'Import Restore'}
@@ -316,6 +315,31 @@ export default function Settings() {
                         </button>
                         <button className="btn btn-danger" onClick={confirmClearAll}>
                             <Icon name="delete_forever" size={18} /> Ya, Hapus Semua
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Telegram Export Fallback Modal */}
+            <Modal
+                open={showExportFallbackModal}
+                onClose={() => setShowExportFallbackModal(false)}
+                title="Gagal Mengirim ke Telegram"
+                width="400px"
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <p style={{ margin: 0, lineHeight: 1.6 }}>
+                        Terjadi kesalahan saat mencoba mengirim backup ke Telegram: <br />
+                        <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{exportErrorMsg}</span>
+                        <br /><br />
+                        Penyebabnya mungkin karena tidak ada koneksi internet. Apakah Anda ingin mengunduh file backup secara manual ke perangkat ini?
+                    </p>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-ghost" onClick={() => setShowExportFallbackModal(false)}>
+                            <Icon name="close" size={18} /> Batal
+                        </button>
+                        <button className="btn btn-primary" onClick={executeManualExport}>
+                            <Icon name="download" size={18} /> Ya, Unduh Manual
                         </button>
                     </div>
                 </div>
