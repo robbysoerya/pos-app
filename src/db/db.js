@@ -23,4 +23,11 @@ db.version(3).stores({
     debt_payments: '++id, debtId, createdAt',
 })
 
+// v4: enforce unique customer names
+db.version(4).stores({
+    customers: '++id, &name, phone',
+    debts: '++id, customerId, transactionId, status, createdAt',
+    debt_payments: '++id, debtId, createdAt',
+})
+
 export default db

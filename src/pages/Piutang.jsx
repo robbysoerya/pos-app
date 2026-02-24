@@ -46,8 +46,10 @@ export default function Piutang() {
     const [payAmount, setPayAmount] = useState('')
     const [payNote, setPayNote] = useState('')
     const [paying, setPaying] = useState(false)
-    const [payAllModal, setPayAllModal] = useState(false)
-    const [payingAll, setPayingAll] = useState(false)
+    const [payTotalModal, setPayTotalModal] = useState(false)
+    const [payTotalAmount, setPayTotalAmount] = useState('')
+    const [payTotalNote, setPayTotalNote] = useState('')
+    const [payingTotal, setPayingTotal] = useState(false)
     const [txnDetail, setTxnDetail] = useState(null)  // { txn, items }
 
     // All customers (plain list)
@@ -100,17 +102,22 @@ export default function Piutang() {
 
     /* ── Add customer ─────────────────────────────────── */
     async function handleAddCustomer() {
-        if (!customerForm.name.trim()) return showToast('Nama wajib diisi', 'error')
+        const cleanName = customerForm.name.trim()
+        if (!cleanName) return showToast('Nama wajib diisi', 'error')
         try {
+            // Check uniqueness
+            const existing = await db.customers.where('name').equalsIgnoreCase(cleanName).count()
+            if (existing > 0) return showToast('Nama pelanggan sudah digunakan', 'error')
+
             const id = await db.customers.add({
-                name: customerForm.name.trim(),
+                name: cleanName,
                 phone: customerForm.phone.trim(),
             })
             showToast('Pelanggan ditambahkan', 'success')
             setAddCustomerModal(false)
             setCustomerForm({ name: '', phone: '' })
             // Auto-select new customer
-            setSelectedCustomer({ id, name: customerForm.name.trim(), phone: customerForm.phone.trim() })
+            setSelectedCustomer({ id, name: cleanName, phone: customerForm.phone.trim() })
         } catch (e) {
             showToast('Error: ' + e.message, 'error')
         }
@@ -144,36 +151,61 @@ export default function Piutang() {
         }
     }
 
-    /* ── Pay ALL debts for selected customer ─────────── */
-    async function handlePayAll() {
+    /* ── Pay custom amount across ALL debts for selected customer ─────────── */
+    async function handlePayTotal() {
         if (!selectedCustomer || !customerDebts) return
         const unpaid = customerDebts.filter(d => d.status !== 'lunas')
         if (unpaid.length === 0) return
-        setPayingAll(true)
+
+        const amount = parseInt(payTotalAmount.replace(/\D/g, '')) || 0
+        if (amount <= 0) return showToast('Nominal harus lebih dari 0', 'error')
+
+        const totalOutstanding = unpaid.reduce((s, d) => s + (d.amount - d.paidAmount), 0)
+        if (amount > totalOutstanding) return showToast(`Melebihi total hutang (${fmtCurrency(totalOutstanding)})`, 'error')
+
+        setPayingTotal(true)
         try {
             const now = new Date().toISOString()
+            // Unpaid debts are already sorted newest first by customerDebts liveQuery
+            // We need to reverse it to pay OLDEST debts first
+            const oldestFirstUnpaid = [...unpaid].reverse()
+
             await db.transaction('rw', [db.debts, db.debt_payments], async () => {
-                for (const debt of unpaid) {
-                    const remaining = debt.amount - debt.paidAmount
-                    if (remaining <= 0) continue
+                let remainingPayment = amount
+
+                for (const debt of oldestFirstUnpaid) {
+                    if (remainingPayment <= 0) break
+
+                    const debtOwed = debt.amount - debt.paidAmount
+                    if (debtOwed <= 0) continue
+
+                    const appliedAmount = Math.min(debtOwed, remainingPayment)
+
                     await db.debt_payments.add({
                         debtId: debt.id,
-                        amount: remaining,
-                        note: 'Lunas semua',
+                        amount: appliedAmount,
+                        note: payTotalNote.trim() || 'Bayar Piutang',
                         createdAt: now,
                     })
+
+                    const newPaid = debt.paidAmount + appliedAmount
+                    const newStatus = newPaid >= debt.amount ? 'lunas' : 'partial'
                     await db.debts.update(debt.id, {
-                        paidAmount: debt.amount,
-                        status: 'lunas',
+                        paidAmount: newPaid,
+                        status: newStatus,
                     })
+
+                    remainingPayment -= appliedAmount
                 }
             })
-            showToast('Semua hutang telah dilunasi! 🎉', 'success')
-            setPayAllModal(false)
+            showToast(amount >= totalOutstanding ? 'Semua hutang lunas! 🎉' : 'Pembayaran piutang dicatat', 'success')
+            setPayTotalModal(false)
+            setPayTotalAmount('')
+            setPayTotalNote('')
         } catch (e) {
             showToast('Error: ' + e.message, 'error')
         } finally {
-            setPayingAll(false)
+            setPayingTotal(false)
         }
     }
 
@@ -271,10 +303,10 @@ export default function Piutang() {
                                             <div className="debt-total-chip">Sisa: {fmtCurrency(outstanding)}</div>
                                             <button
                                                 className="btn btn-success btn-sm"
-                                                onClick={() => setPayAllModal(true)}
-                                                title="Lunasi semua hutang pelanggan ini sekaligus"
+                                                onClick={() => setPayTotalModal(true)}
+                                                title="Bayar keseluruhan hutang pelanggan ini"
                                             >
-                                                <Icon name="done_all" size={16} /> Lunasi Semua
+                                                <Icon name="payments" size={16} /> Bayar Piutang
                                             </button>
                                         </div>
                                     )
@@ -418,14 +450,14 @@ export default function Piutang() {
                 )}
             </Modal>
 
-            {/* ── Modal: Pay All Debts ── */}
+            {/* ── Modal: Pay Total Debts ── */}
             <Modal
-                open={payAllModal}
-                onClose={() => setPayAllModal(false)}
-                title="Lunasi Semua Hutang"
+                open={payTotalModal}
+                onClose={() => setPayTotalModal(false)}
+                title="Bayar Piutang Total"
                 width="400px"
             >
-                {payAllModal && (() => {
+                {payTotalModal && (() => {
                     const unpaid = (customerDebts || []).filter(d => d.status !== 'lunas')
                     const totalOutstanding = unpaid.reduce((s, d) => s + (d.amount - d.paidAmount), 0)
                     return (
@@ -437,30 +469,73 @@ export default function Piutang() {
                                 </div>
                                 <div className="pay-summary-row">
                                     <span>Jumlah Hutang</span>
-                                    <span>{unpaid.length} hutang</span>
+                                    <span>{unpaid.length} hutang aktif</span>
                                 </div>
                                 <div className="pay-summary-row highlight">
-                                    <span>Total Dilunasi</span>
+                                    <span>Total Outstanding</span>
                                     <span style={{ color: 'var(--danger,#ef4444)' }}>
                                         {fmtCurrency(totalOutstanding)}
                                     </span>
                                 </div>
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text3)', lineHeight: 1.5 }}>
-                                Semua hutang yang belum lunas akan ditandai sebagai <strong style={{ color: 'var(--success)' }}>Lunas</strong>.
-                                Tindakan ini tidak dapat dibatalkan.
+
+                            <div className="form-group" style={{ marginTop: '16px' }}>
+                                <label>Nominal Pembayaran <span style={{ color: 'var(--danger)' }}>*</span></label>
+                                <input
+                                    className="input"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Rp 0"
+                                    value={payTotalAmount ? `Rp ${parseInt(payTotalAmount.replace(/\D/g, '') || 0).toLocaleString('id-ID')}` : ''}
+                                    onChange={e => {
+                                        let val = e.target.value.replace(/\D/g, '')
+                                        if (parseInt(val) > totalOutstanding) val = totalOutstanding.toString()
+                                        setPayTotalAmount(val)
+                                    }}
+                                    autoFocus
+                                />
+                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                    {[25, 50, 75, 100].map(pct => {
+                                        const val = Math.round(totalOutstanding * pct / 100)
+                                        return (
+                                            <button
+                                                key={pct}
+                                                className="btn btn-ghost btn-sm"
+                                                style={{ flex: 1, fontSize: '0.75rem', padding: '4px' }}
+                                                onClick={() => setPayTotalAmount(String(val))}
+                                            >
+                                                {pct === 100 ? 'Lunas' : `${pct}%`}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
+
+                            <div className="form-group">
+                                <label>Catatan (opsional)</label>
+                                <input
+                                    className="input"
+                                    placeholder="Misal: cicilan pertama"
+                                    value={payTotalNote}
+                                    onChange={e => setPayTotalNote(e.target.value)}
+                                />
+                            </div>
+
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text3)', lineHeight: 1.5, marginTop: '12px' }}>
+                                Pembayaran ini akan dialokasikan secara otomatis ke hutang yang paling lama terlebih dahulu.
+                            </div>
+
                             <div className="flex gap3 mt2">
-                                <button className="btn btn-ghost" onClick={() => setPayAllModal(false)}>
+                                <button className="btn btn-ghost" onClick={() => { setPayTotalModal(false); setPayTotalAmount(''); setPayTotalNote('') }}>
                                     Batal
                                 </button>
                                 <button
                                     className="btn btn-success btn-block"
-                                    disabled={payingAll}
-                                    onClick={handlePayAll}
+                                    disabled={payingTotal || !payTotalAmount || parseInt(payTotalAmount.replace(/\D/g, '')) <= 0}
+                                    onClick={handlePayTotal}
                                 >
-                                    <Icon name="done_all" size={18} />
-                                    {payingAll ? 'Memproses...' : `Lunasi ${fmtCurrency(totalOutstanding)}`}
+                                    <Icon name="payments" size={18} />
+                                    {payingTotal ? 'Memproses...' : 'Konfirmasi Bayar'}
                                 </button>
                             </div>
                         </div>

@@ -14,6 +14,7 @@ export default function History() {
 
     const [detail, setDetail] = useState(null)
     const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+    const [typeFilter, setTypeFilter] = useState('all')
 
     async function openDetail(txn) {
         const items = await db.table('transaction_items').where('transactionId').equals(txn.id).toArray()
@@ -41,22 +42,49 @@ export default function History() {
 
     const filtered = (transactions || []).filter(txn => !dateFilter || txn.createdAt.startsWith(dateFilter))
 
+    // Fetch debt payments and resolve customer names for the UI unified list
+    const debtPayments = useLiveQuery(async () => {
+        const p = await db.debt_payments.toArray();
+        const filtered = p.filter(x => !dateFilter || x.createdAt.startsWith(dateFilter));
+
+        // Resolve customer names for each payment
+        return Promise.all(filtered.map(async (pay) => {
+            const debt = await db.debts.get(pay.debtId);
+            let customerName = 'Pelanggan';
+            if (debt) {
+                const customer = await db.customers.get(debt.customerId);
+                if (customer) customerName = customer.name;
+            }
+            return { ...pay, customerName };
+        }));
+    }, [dateFilter]) || []
+
+    const allUnifiedItems = [...filtered.map(t => ({ ...t, _type: 'txn' })), ...debtPayments.map(p => ({ ...p, _type: 'payment' }))]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+    const unifiedItems = allUnifiedItems.filter(item => typeFilter === 'all' || item._type === typeFilter)
+
     // Revenue = cash txn totals + debt_payments received in that date range
     const totalRevenue = useLiveQuery(async () => {
         const cashTotal = filtered
             .filter(t => t.paymentType !== 'debt')
             .reduce((s, t) => s + t.total, 0)
 
-        // Sum all debt payments
-        const allPayments = await db.debt_payments.toArray()
-        const debtPaymentsTotal = allPayments
-            .filter(p => !dateFilter || p.createdAt.startsWith(dateFilter))
-            .reduce((s, p) => s + p.amount, 0)
+        // Include DP from debt checkout if any (it exists in debt_payments so we just sum debtPayments!)
+        const debtPaymentsTotal = debtPayments.reduce((s, p) => s + p.amount, 0)
 
         return cashTotal + debtPaymentsTotal
-    }, [filtered.length, dateFilter])
+    }, [filtered.length, debtPayments.length, dateFilter])
 
     const maxTransaction = filtered.reduce((max, t) => Math.max(max, t.total), 0)
+
+    // Calculate total outstanding piutang for the filtered date
+    const totalPiutang = useLiveQuery(async () => {
+        const debts = await db.debts.toArray()
+        return debts
+            .filter(d => !dateFilter || d.createdAt.startsWith(dateFilter))
+            .reduce((s, d) => s + (d.amount - d.paidAmount), 0)
+    }, [dateFilter, unifiedItems.length])
 
     // Calculate Best Seller for the current filtered date
     const bestSeller = useLiveQuery(async () => {
@@ -95,46 +123,90 @@ export default function History() {
 
             <div className="history-summary">
                 <div className="summary-stat">
-                    <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Pendapatan {dateFilter === new Date().toISOString().split('T')[0] ? 'Hari Ini' : ''}</div>
+                    <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Total Pendapatan {dateFilter === new Date().toISOString().split('T')[0] ? 'Hari Ini' : ''}</div>
                     <div className="summary-val">{fmtCurrency(totalRevenue ?? 0)}</div>
                 </div>
                 <div className="summary-stat">
-                    <div className="summary-lbl">Total Transaksi</div>
-                    <div className="summary-val">{filtered.length}</div>
+                    <div className="summary-lbl">Sisa Piutang</div>
+                    <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2, color: 'var(--danger)' }}>{fmtCurrency(totalPiutang ?? 0)}</div>
                 </div>
                 <div className="summary-stat">
                     <div className="summary-lbl">Produk Terlaris</div>
                     <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2 }}>{bestSeller || '-'}</div>
                 </div>
                 <div className="summary-stat">
-                    <div className="summary-lbl">Transaksi Terbesar</div>
-                    <div className="summary-val">{fmtCurrency(maxTransaction)}</div>
+                    <div className="summary-lbl">Transaksi POS Terbesar</div>
+                    <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2 }}>{fmtCurrency(maxTransaction)}</div>
                 </div>
             </div>
 
             <div className="page-body">
-                {filtered.length === 0 && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
+                    <button
+                        className={`btn ${typeFilter === 'all' ? 'btn-primary' : ''}`}
+                        style={{ borderRadius: '20px', padding: '6px 16px', fontWeight: typeFilter === 'all' ? 600 : 400, background: typeFilter === 'all' ? 'var(--primary)' : 'var(--surface2)', color: typeFilter === 'all' ? '#fff' : 'var(--text)' }}
+                        onClick={() => setTypeFilter('all')}>
+                        Semua
+                    </button>
+                    <button
+                        className={`btn ${typeFilter === 'txn' ? 'btn-primary' : ''}`}
+                        style={{ borderRadius: '20px', padding: '6px 16px', fontWeight: typeFilter === 'txn' ? 600 : 400, background: typeFilter === 'txn' ? 'var(--primary)' : 'var(--surface2)', color: typeFilter === 'txn' ? '#fff' : 'var(--text)' }}
+                        onClick={() => setTypeFilter('txn')}>
+                        Kasir (POS)
+                    </button>
+                    <button
+                        className={`btn ${typeFilter === 'payment' ? 'btn-primary' : ''}`}
+                        style={{ borderRadius: '20px', padding: '6px 16px', fontWeight: typeFilter === 'payment' ? 600 : 400, background: typeFilter === 'payment' ? 'var(--primary)' : 'var(--surface2)', color: typeFilter === 'payment' ? '#fff' : 'var(--text)' }}
+                        onClick={() => setTypeFilter('payment')}>
+                        Piutang
+                    </button>
+                </div>
+                {unifiedItems.length === 0 && (
                     <div className="empty-state">
                         <Icon name="receipt_long" size={48} className="empty-icon" />
-                        <p>{dateFilter ? 'Tidak ada transaksi pada tanggal ini' : 'Belum ada transaksi'}</p>
+                        <p>{dateFilter ? 'Tidak ada transaksi pada tanggal ini' : 'Belum ada catatan'}</p>
                     </div>
                 )}
                 <div className="txn-list">
-                    {filtered.map(txn => (
-                        <button key={txn.id} className="txn-card" onClick={() => openDetail(txn)}>
+                    {unifiedItems.map(item => (
+                        item._type === 'txn' ? (
+                            <button key={'txn-' + item.id} className="txn-card" onClick={() => openDetail(item)}>
                             <div className="txn-id">
-                                {fmtTxnId(txn.id)}
-                                {txn.paymentType === 'debt' && (
+                                    {fmtTxnId(item.id)}
+                                    {item.paymentType === 'debt' && (
                                     <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.65rem' }}>HUTANG</span>
                                 )}
                             </div>
                             <div className="txn-meta">
-                                <span>{fmtDateTime(txn.createdAt)}</span>
-                                <span className="text2">{txn.itemCount} item</span>
+                                    <span>{fmtDateTime(item.createdAt)}</span>
+                                    <span className="text2">{item.itemCount} item</span>
                             </div>
-                            <div className="txn-total">{fmtCurrency(txn.total)}</div>
+                                <div className="txn-total">
+                                    {item.paymentType === 'debt' ? (
+                                        <span style={{ color: 'var(--danger)', opacity: 0.6 }}>{fmtCurrency(item.total)}</span>
+                                    ) : (
+                                        fmtCurrency(item.total)
+                                    )}
+                                </div>
                             <Icon name="chevron_right" size={22} style={{ color: 'var(--text2)' }} />
                         </button>
+                        ) : (
+                            <div key={'pay-' + item.id} className="txn-card" style={{ background: 'color-mix(in srgb, var(--success,#10b981) 8%, white)', cursor: 'default' }}>
+                                <div className="txn-id" style={{ color: 'var(--success)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <Icon name="payments" size={16} filled style={{ marginRight: 6 }} />
+                                        PELUNASAN PIUTANG
+                                    </div>
+                                    {item.customerName && <div style={{ color: 'var(--text)', fontSize: '0.85rem', fontWeight: 600, marginTop: 4 }}>{item.customerName}</div>}
+                                </div>
+                                <div className="txn-meta">
+                                    <span>{fmtDateTime(item.createdAt)}</span>
+                                    {item.note && <span className="text2" style={{ marginLeft: '12px', fontStyle: 'italic' }}>"{item.note}"</span>}
+                                </div>
+                                <div className="txn-total" style={{ color: 'var(--success)', fontWeight: 'bold' }}>+ {fmtCurrency(item.amount)}</div>
+                                <Icon name="check_circle" filled size={22} style={{ color: 'var(--success, #10b981)', opacity: 0.8 }} />
+                            </div>
+                        )
                     ))}
                 </div>
             </div>

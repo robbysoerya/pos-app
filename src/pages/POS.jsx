@@ -583,10 +583,15 @@ export default function POS() {
                                     className="btn btn-success btn-block"
                                     disabled={!newCustomerForm.name.trim() || debtLoading}
                                     onClick={async () => {
-                                        if (!newCustomerForm.name.trim() || debtLoading) return
+                                        const cleanName = newCustomerForm.name.trim()
+                                        if (!cleanName || debtLoading) return
                                         try {
-                                            const id = await db.customers.add({ name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
-                                            setConfirmDebtCustomer({ id, name: newCustomerForm.name.trim(), phone: newCustomerForm.phone.trim() })
+                                            // Check uniqueness (case-insensitive)
+                                            const existing = await db.customers.where('name').equalsIgnoreCase(cleanName).count()
+                                            if (existing > 0) return showToast('Nama pelanggan sudah digunakan', 'error')
+
+                                            const id = await db.customers.add({ name: cleanName, phone: newCustomerForm.phone.trim() })
+                                            setConfirmDebtCustomer({ id, name: cleanName, phone: newCustomerForm.phone.trim() })
                                         } catch (e) { showToast('Error: ' + e.message, 'error') }
                                     }}
                                 >
