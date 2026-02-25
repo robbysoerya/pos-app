@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useEffect } from 'react'
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 import './App.css'
 import Icon from './components/Icon.jsx'
@@ -31,6 +32,44 @@ export default function App() {
 
   // Show reminder if there are transactions and no backup in the last 7 days
   const needsBackup = txnCount > 0 && (!backupRow || (Date.now() - new Date(backupRow.value).getTime() > 7 * 24 * 60 * 60 * 1000))
+
+  useEffect(() => {
+    import('./utils/bluetooth.js').then(({ autoConnectPrinter }) => {
+      autoConnectPrinter().catch(() => { })
+    })
+
+    // --- Screen Wake Lock API ---
+    let wakeLock = null
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen')
+          wakeLock.addEventListener('release', () => {
+            console.log('Screen Wake Lock released')
+          })
+          console.log('Screen Wake Lock acquired')
+        }
+      } catch (err) {
+        console.warn(`${err.name}, ${err.message}`)
+      }
+    }
+
+    // Request on mount
+    requestWakeLock()
+
+    // Re-request when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (wakeLock !== null) wakeLock.release().catch(() => { })
+    }
+  }, [])
 
   return (
     <BrowserRouter>

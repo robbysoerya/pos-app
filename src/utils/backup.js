@@ -1,5 +1,19 @@
 import db from '../db/db.js'
 
+async function compressJSON(jsonString) {
+    const stream = new Blob([jsonString], { type: 'application/json' }).stream()
+    const compressedReadableStream = stream.pipeThrough(new CompressionStream('gzip'))
+    const compressedResponse = new Response(compressedReadableStream)
+    return await compressedResponse.blob()
+}
+
+async function decompressBlob(blob) {
+    const stream = blob.stream()
+    const decompressedReadableStream = stream.pipeThrough(new DecompressionStream('gzip'))
+    const decompressedResponse = new Response(decompressedReadableStream)
+    return await decompressedResponse.text()
+}
+
 /** Gather all database tables into a JSON string and filename */
 export async function getBackupData(storeName = 'My Store') {
     const [categories, products, transactions, transaction_items, stock_movements, settings, customers, debts, debt_payments] = await Promise.all([
@@ -21,56 +35,55 @@ export async function getBackupData(storeName = 'My Store') {
         data: { categories, products, transactions, transaction_items, stock_movements, settings, customers, debts, debt_payments },
     }
 
-    const filename = `pos-backup-${new Date().toISOString().split('T')[0]}.json`
-    const json = JSON.stringify(backup, null, 2)
+    const filename = `pos-backup-${new Date().toISOString().split('T')[0]}.json.gz`
+    const json = JSON.stringify(backup)
     return { json, filename }
 }
 
-/** Export all tables to a JSON blob and trigger download */
+/** Export all tables to a compressed blob and trigger download */
 export async function exportBackup(storeName = 'My Store') {
     const { json, filename } = await getBackupData(storeName)
+    const compressedBlob = await compressJSON(json)
 
-    // Chrome 86+: use File System Access API — shows a proper "Save As" dialog
-    // and avoids all blob URL async restrictions that cause random UUID filenames.
+    // Chrome 86+: use File System Access API
     if ('showSaveFilePicker' in window) {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName: filename,
-                types: [{ description: 'JSON Backup', accept: { 'application/json': ['.json'] } }],
+                types: [{ description: 'GZIP Backup', accept: { 'application/gzip': ['.gz'] } }],
             })
             const writable = await handle.createWritable()
-            await writable.write(json)
+            await writable.write(compressedBlob)
             await writable.close()
             return true
         } catch (e) {
-            if (e.name === 'AbortError') return false  // user cancelled — not an error
-            // fall through to data URL fallback
+            if (e.name === 'AbortError') return false
         }
     }
 
-    // Fallback for Edge / Firefox / Safari: use data URL instead of blob URL.
-    // Data URLs always honour the download attribute even from async contexts.
-    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(json)
+    // Fallback for edge/firefox: construct an object URL for the blob
+    const blobUrl = URL.createObjectURL(compressedBlob)
     const a = document.createElement('a')
     a.style.display = 'none'
-    a.href = dataUrl
+    a.href = blobUrl
     a.setAttribute('download', filename)
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
     return true
 }
 
-/** Sends the backup JSON file directly to a Telegram Bot */
+/** Sends the backup file directly to a Telegram Bot */
 export async function sendBackupToTelegram(token, chatId, storeName = 'My Store') {
     if (!token || !chatId) throw new Error('Telegram Token dan Chat ID wajib diisi')
 
     const { json, filename } = await getBackupData(storeName)
-    const blob = new Blob([json], { type: 'application/json' })
+    const compressedBlob = await compressJSON(json)
 
     const formData = new FormData()
     formData.append('chat_id', chatId)
-    formData.append('document', blob, filename)
+    formData.append('document', compressedBlob, filename)
     formData.append('caption', `📦 Backup POS ${storeName}\n📅 ${new Date().toLocaleString()}`)
 
     const response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
@@ -85,9 +98,15 @@ export async function sendBackupToTelegram(token, chatId, storeName = 'My Store'
     return true
 }
 
-/** Read a JSON backup file and restore all tables (full replace) */
+/** Read a backup file (handles .gz and plain .json) and restore all tables */
 export async function importBackup(file) {
-    const text = await file.text()
+    let text
+    if (file.name.endsWith('.gz')) {
+        text = await decompressBlob(file)
+    } else {
+        text = await file.text()
+    }
+
     const backup = JSON.parse(text)
 
     if (!backup.data) throw new Error('Invalid backup file format')

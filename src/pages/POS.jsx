@@ -6,7 +6,7 @@ import NumPad from '../components/NumPad.jsx'
 import { showToast } from '../components/Toast.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import db from '../db/db.js'
-import { isPrinterConnected, printReceipt } from '../utils/bluetooth.js'
+import { printReceipt } from '../utils/bluetooth.js'
 import { fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../utils/format.js'
 import './POS.css'
 
@@ -697,12 +697,11 @@ export default function POS() {
 function ReceiptPreview({ txn, onClose }) {
     const handleReprint = async () => {
         try {
-            if (!isPrinterConnected()) { showToast('Printer tidak terhubung', 'error'); return }
             const storeName = (await db.settings.get('storeName'))?.value || 'My Store'
             await printReceipt(txn, storeName)
             showToast('Berhasil print!', 'success')
         } catch (e) {
-            showToast('Gagal print: ' + e.message, 'error')
+            showToast(e.message, 'error')
         }
     }
 

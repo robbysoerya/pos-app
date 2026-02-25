@@ -60,6 +60,37 @@ export async function disconnectPrinter() {
     _char = null
 }
 
+export async function autoConnectPrinter() {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return false
+
+    try {
+        const savedName = getPrinterName()
+        if (!savedName) return false
+
+        const devices = await navigator.bluetooth.getDevices()
+        const target = devices.find(d => d.name === savedName)
+
+        if (target) {
+            const server = await target.gatt.connect()
+            const service = await server.getPrimaryService(PRINTER_SERVICE_UUID)
+            const char = await service.getCharacteristic(PRINTER_CHAR_UUID)
+
+            _device = target
+            _char = char
+
+            target.addEventListener('gattserverdisconnected', () => {
+                _device = null
+                _char = null
+            })
+
+            return target.name || 'Bluetooth Printer'
+        }
+    } catch (e) {
+        console.warn('Auto-connect failed:', e)
+    }
+    return false
+}
+
 /** Send raw bytes to printer */
 async function sendData(bytes) {
     if (!_char) throw new Error('Printer not connected')
@@ -72,7 +103,17 @@ async function sendData(bytes) {
 /** Format a receipt and print it */
 export async function printReceipt(transaction, storeName = 'My Store', retry = true) {
     try {
-        if (!isPrinterConnected()) throw new Error('Printer not connected')
+        if (!isPrinterConnected()) {
+            let reconnected = await autoConnectPrinter()
+            if (!reconnected) {
+                // If auto connect fails (e.g. no permitted devices found yet),
+                // fallback to the manual chooser.
+                reconnected = await connectPrinter()
+            }
+            if (!reconnected) {
+                throw new Error('Printer tidak terhubung. Pembatalan koneksi.')
+            }
+        }
 
         const lines = buildReceipt(transaction, storeName)
         await sendData(lines)
@@ -111,9 +152,15 @@ function buildReceipt(txn, storeName) {
     push(...ALIGN_LEFT)
 
     const date = new Date(txn.createdAt)
-    push(...text(`Tanggal: ${date.toLocaleDateString('id-ID')}`))
-    push(...text(`Waktu: ${date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':')}`))
-    push(...text(`No:   #${String(txn.id).padStart(6, '0')}`))
+    const dateStr = date.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    })
+    push(...text(`Tanggal : ${dateStr}`))
+    push(...text(`Jam     : ${date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':')}`))
+    push(...text(`No      : #${String(txn.id).padStart(6, '0')}`))
     push(...text('--------------------------------'))
 
     txn.items.forEach(item => {

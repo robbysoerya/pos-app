@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { showToast } from '../components/Toast.jsx'
 import db from '../db/db.js'
-import { isPrinterConnected, printReceipt } from '../utils/bluetooth.js'
+import { printReceipt } from '../utils/bluetooth.js'
 import { fmtCurrency, fmtDateTime, fmtTxnId } from '../utils/format.js'
 import './History.css'
 
@@ -13,8 +13,18 @@ export default function History() {
         db.transactions.orderBy('createdAt').reverse().toArray(), [])
 
     const [detail, setDetail] = useState(null)
-    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+    const today = new Date().toISOString().split('T')[0]
+    const [startDate, setStartDate] = useState(today)
+    const [endDate, setEndDate] = useState(today)
     const [typeFilter, setTypeFilter] = useState('all')
+
+    function isWithinRange(dateStr) {
+        if (!dateStr) return false;
+        const d = dateStr.split('T')[0];
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+        return true;
+    }
 
     async function openDetail(txn) {
         const items = await db.table('transaction_items').where('transactionId').equals(txn.id).toArray()
@@ -30,22 +40,21 @@ export default function History() {
     }
 
     async function handleReprint(txn) {
-        if (!isPrinterConnected()) return showToast('Printer tidak terhubung. Hubungkan di Pengaturan.', 'error')
         try {
             const storeName = (await db.settings.get('storeName'))?.value || 'My Store'
             await printReceipt(txn, storeName)
             showToast('Berhasil print!', 'success')
         } catch (e) {
-            showToast('Gagal print: ' + e.message, 'error')
+            showToast(e.message, 'error')
         }
     }
 
-    const filtered = (transactions || []).filter(txn => !dateFilter || txn.createdAt.startsWith(dateFilter))
+    const filtered = (transactions || []).filter(txn => isWithinRange(txn.createdAt))
 
     // Fetch debt payments and resolve customer names for the UI unified list
     const debtPayments = useLiveQuery(async () => {
         const p = await db.debt_payments.toArray();
-        const filtered = p.filter(x => !dateFilter || x.createdAt.startsWith(dateFilter));
+        const filtered = p.filter(x => isWithinRange(x.createdAt));
 
         // Resolve customer names for each payment
         return Promise.all(filtered.map(async (pay) => {
@@ -57,7 +66,7 @@ export default function History() {
             }
             return { ...pay, customerName };
         }));
-    }, [dateFilter]) || []
+    }, [startDate, endDate]) || []
 
     const allUnifiedItems = [...filtered.map(t => ({ ...t, _type: 'txn' })), ...debtPayments.map(p => ({ ...p, _type: 'payment' }))]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -74,7 +83,7 @@ export default function History() {
         const debtPaymentsTotal = debtPayments.reduce((s, p) => s + p.amount, 0)
 
         return cashTotal + debtPaymentsTotal
-    }, [filtered.length, debtPayments.length, dateFilter])
+    }, [filtered.length, debtPayments.length, startDate, endDate])
 
     const maxTransaction = filtered.reduce((max, t) => Math.max(max, t.total), 0)
 
@@ -82,9 +91,9 @@ export default function History() {
     const totalPiutang = useLiveQuery(async () => {
         const debts = await db.debts.toArray()
         return debts
-            .filter(d => !dateFilter || d.createdAt.startsWith(dateFilter))
+            .filter(d => isWithinRange(d.createdAt))
             .reduce((s, d) => s + (d.amount - d.paidAmount), 0)
-    }, [dateFilter, unifiedItems.length])
+    }, [startDate, endDate, unifiedItems.length])
 
     // Calculate Best Seller for the current filtered date
     const bestSeller = useLiveQuery(async () => {
@@ -111,10 +120,18 @@ export default function History() {
                 <div className="flex gap3 items-center">
                     <input
                         type="date" className="input" style={{ width: 'auto' }}
-                        value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+                        value={startDate} onChange={e => setStartDate(e.target.value)}
+                        max={today}
                     />
-                    {dateFilter && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => setDateFilter('')}>
+                    <span style={{ color: 'var(--text2)', fontWeight: 500 }}>-</span>
+                    <input
+                        type="date" className="input" style={{ width: 'auto' }}
+                        value={endDate} onChange={e => setEndDate(e.target.value)}
+                        min={startDate || ''}
+                        max={today}
+                    />
+                    {(startDate || endDate) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setStartDate(''); setEndDate(''); }}>
                             <Icon name="close" size={16} /> Reset
                         </button>
                     )}
@@ -123,7 +140,7 @@ export default function History() {
 
             <div className="history-summary">
                 <div className="summary-stat">
-                    <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Total Pendapatan {dateFilter === new Date().toISOString().split('T')[0] ? 'Hari Ini' : ''}</div>
+                    <div className="summary-lbl" style={{ color: 'var(--primary)' }}>Total Pendapatan {(startDate === today && endDate === today) ? 'Hari Ini' : ''}</div>
                     <div className="summary-val">{fmtCurrency(totalRevenue ?? 0)}</div>
                 </div>
                 <div className="summary-stat">
@@ -135,7 +152,7 @@ export default function History() {
                     <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2 }}>{bestSeller || '-'}</div>
                 </div>
                 <div className="summary-stat">
-                    <div className="summary-lbl">Transaksi POS Terbesar</div>
+                    <div className="summary-lbl">Transaksi Terbesar</div>
                     <div className="summary-val" style={{ fontSize: '1.05rem', marginTop: 2 }}>{fmtCurrency(maxTransaction)}</div>
                 </div>
             </div>
@@ -164,7 +181,7 @@ export default function History() {
                 {unifiedItems.length === 0 && (
                     <div className="empty-state">
                         <Icon name="receipt_long" size={48} className="empty-icon" />
-                        <p>{dateFilter ? 'Tidak ada transaksi pada tanggal ini' : 'Belum ada catatan'}</p>
+                        <p>{(startDate || endDate) ? 'Tidak ada transaksi pada periode ini' : 'Belum ada catatan'}</p>
                     </div>
                 )}
                 <div className="txn-list">

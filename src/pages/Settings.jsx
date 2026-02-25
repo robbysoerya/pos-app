@@ -215,7 +215,7 @@ export default function Settings() {
                             </button>
                             <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
                                 <Icon name="upload" size={18} /> {restoring ? 'Restoring...' : 'Import Restore'}
-                                <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+                                <input ref={fileRef} type="file" accept=".json,.gz" style={{ display: 'none' }} onChange={handleImport} />
                             </label>
                         </div>
                     </section>
