@@ -27,3 +27,9 @@ export function fmtTxnId(id) {
 export function parseAmount(str) {
     return parseInt(str || '0', 10) || 0
 }
+
+/** Capitalize first letter of a string */
+export function fmtCapitalize(str) {
+    if (!str) return str
+    return str.charAt(0).toUpperCase() + str.slice(1)
+}

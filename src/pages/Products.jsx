@@ -1,13 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import * as XLSX from 'xlsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { showToast } from '../components/Toast.jsx'
 import db from '../db/db.js'
-import { fmtCurrency } from '../utils/format.js'
+import { fmtCapitalize, fmtCurrency } from '../utils/format.js'
 import './Products.css'
 
-const EMPTY_FORM = { name: '', categoryId: '', price: '', resellerPrice: '', stock: '', low_stock_threshold: '', barcode: '' }
+const EMPTY_FORM = { name: '', categoryId: '', price: '', resellerPrice: '', stock: '', low_stock_threshold: '', barcode: '', trackStock: false }
 
 export default function Products() {
     const categories = useLiveQuery(() => db.categories.toArray(), [])
@@ -19,6 +20,8 @@ export default function Products() {
     const [search, setSearch] = useState('')
     const [loading, setLoading] = useState(false)
     const [pendingDelete, setPendingDelete] = useState(null)
+    const [bulkUploadModal, setBulkUploadModal] = useState(false)
+    const [bulkUploadLoading, setBulkUploadLoading] = useState(false)
 
     function openAdd() {
         setForm({ ...EMPTY_FORM, categoryId: categories?.[0]?.id ?? '' })
@@ -29,7 +32,7 @@ export default function Products() {
             name: p.name, categoryId: p.categoryId ?? '', price: String(p.price),
             resellerPrice: String(p.resellerPrice ?? ''),
             stock: String(p.stock), low_stock_threshold: String(p.low_stock_threshold ?? ''),
-            barcode: p.barcode ?? ''
+            barcode: p.barcode ?? '', trackStock: p.trackStock ?? false
         })
         setModal({ id: p.id })
     }
@@ -38,7 +41,7 @@ export default function Products() {
             name: p.name, categoryId: p.categoryId ?? '', price: String(p.price),
             resellerPrice: String(p.resellerPrice ?? ''),
             stock: String(p.stock), low_stock_threshold: String(p.low_stock_threshold ?? ''),
-            barcode: ''
+            barcode: '', trackStock: p.trackStock ?? false
         })
         setModal({ id: null, isDuplicate: true })
     }
@@ -52,9 +55,10 @@ export default function Products() {
             categoryId: form.categoryId ? Number(form.categoryId) : null,
             price: Number(form.price),
             resellerPrice: form.resellerPrice ? Number(form.resellerPrice) : Number(form.price),
-            stock: Number(form.stock) || 0,
-            low_stock_threshold: Number(form.low_stock_threshold) || 0,
+            stock: form.trackStock ? (Number(form.stock) || 0) : 0,
+            low_stock_threshold: form.trackStock ? (Number(form.low_stock_threshold) || 0) : 0,
             barcode: form.barcode.trim() || null,
+            trackStock: form.trackStock || false,
         }
         setLoading(true)
         try {
@@ -84,16 +88,102 @@ export default function Products() {
         })
     }
 
+    async function handleBulkUpload(e) {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setBulkUploadLoading(true)
+        try {
+            const data = await file.arrayBuffer()
+            const wb = XLSX.read(data, { type: 'array' })
+            let totalProducts = 0
+
+            await db.transaction('rw', [db.categories, db.products], async () => {
+                for (let sheetIdx = 0; sheetIdx < wb.SheetNames.length; sheetIdx++) {
+                    const sheetName = wb.SheetNames[sheetIdx]
+                    const ws = wb.Sheets[sheetName]
+                    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 })
+
+                    if (jsonData.length === 0) continue
+
+                    const headers = jsonData[0].map(h => String(h).toLowerCase().trim())
+                    const namaIdx = headers.indexOf('nama')
+                    const hargaJualIdx = headers.indexOf('harga jual')
+                    const hargaGrosirIdx = headers.indexOf('harga grosir')
+                    const barcodeIdx = headers.indexOf('barcode')
+
+                    if (namaIdx === -1 || hargaJualIdx === -1) {
+                        throw new Error(`Sheet "${sheetName}": Columns "nama" and "harga jual" are required`)
+                    }
+
+                    let categoryName = sheetName.toLowerCase().trim()
+                    if (wb.SheetNames.length === 1 && file.name.toLowerCase().endsWith('.csv')) {
+                        const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
+                        categoryName = fileNameWithoutExt.toLowerCase().trim()
+                    }
+                    let categoryId = null
+
+                    if (categoryName) {
+                        let existingCat = await db.categories.where('name').equalsIgnoreCase(categoryName).first()
+                        if (!existingCat) {
+                            categoryId = await db.categories.add({ name: categoryName })
+                        } else {
+                            categoryId = existingCat.id
+                        }
+                    }
+
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i]
+                        const nama = String(row[namaIdx] || '').trim()
+                        if (!nama) continue
+
+                        const hargaJual = Number(String(row[hargaJualIdx] || '').replace(/[^0-9]/g, ''))
+                        if (!hargaJual || isNaN(hargaJual)) continue
+
+                        const hargaGrosir = hargaGrosirIdx !== -1 ? Number(String(row[hargaGrosirIdx] || '').replace(/[^0-9]/g, '')) : hargaJual
+                        const barcode = barcodeIdx !== -1 ? String(row[barcodeIdx] || '').trim() : null
+
+                        const payload = {
+                            name: nama,
+                            categoryId,
+                            price: hargaJual,
+                            resellerPrice: hargaGrosir || hargaJual,
+                            stock: 0,
+                            low_stock_threshold: 0,
+                            barcode: barcode || null,
+                            trackStock: false,
+                        }
+
+                        await db.products.add(payload)
+                        totalProducts++
+                    }
+                }
+            })
+
+            showToast(`${totalProducts} produk berhasil diimport!`, 'success')
+            setBulkUploadModal(false)
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error')
+        } finally {
+            setBulkUploadLoading(false)
+            e.target.value = ''
+        }
+    }
+
     const filtered = (products || []).filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-    const catMap = Object.fromEntries((categories || []).map(c => [c.id, c.name]))
+    const catMap = Object.fromEntries((categories || []).map(c => [c.id, fmtCapitalize(c.name)]))
 
     return (
         <div className="page">
             <div className="page-header">
                 <h1><Icon name="inventory_2" size={26} filled style={{ marginRight: 8 }} />Produk</h1>
-                <button id="add-product-btn" className="btn btn-primary" onClick={openAdd}>
-                    <Icon name="add" size={20} /> Tambah
-                </button>
+                <div className="flex gap2">
+                    <button className="btn btn-ghost" onClick={() => setBulkUploadModal(true)}>
+                        <Icon name="upload_file" size={20} /> Import CSV/Excel
+                    </button>
+                    <button id="add-product-btn" className="btn btn-primary" onClick={openAdd}>
+                        <Icon name="add" size={20} /> Tambah
+                    </button>
+                </div>
             </div>
 
             <div className="page-body">
@@ -118,8 +208,8 @@ export default function Products() {
 
                 <div className="product-table">
                     {filtered.map(p => {
-                        const isLow = p.stock <= (p.low_stock_threshold || 0)
-                        const isOut = p.stock <= 0
+                        const isLow = p.trackStock && p.stock <= (p.low_stock_threshold || 0)
+                        const isOut = p.trackStock && p.stock <= 0
                         return (
                             <div key={p.id} className="product-row">
                                 <div className="product-row-info">
@@ -128,17 +218,21 @@ export default function Products() {
                                         <span className="text2">{catMap[p.categoryId] || '—'}</span>
                                         <span>{fmtCurrency(p.price)} {p.resellerPrice && p.resellerPrice !== p.price ? `/ ${fmtCurrency(p.resellerPrice)}` : ''}</span>
                                         {p.barcode && <span className="text2" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{p.barcode}</span>}
-                                        {isOut
+                                        {!p.trackStock && <span className="badge badge-ghost">Tanpa Stok</span>}
+                                        {isOut && p.trackStock
                                             ? <span className="badge badge-danger">Habis</span>
-                                            : isLow ? <span className="badge badge-warning">Stok Rendah</span> : null
+                                            : isLow && p.trackStock ? <span className="badge badge-warning">Stok Rendah</span> : null
                                         }
                                     </div>
                                 </div>
-                                <div className="product-row-stock">
-                                    <button className="qty-btn" onClick={() => adjustStock(p, -1)}>−</button>
-                                    <span className={'stock-val' + (isLow ? ' low' : '')}>{p.stock}</span>
-                                    <button className="qty-btn" onClick={() => adjustStock(p, +1)}>+</button>
-                                </div>
+                                {p.trackStock && (
+                                    <div className="product-row-stock">
+                                        <button className="qty-btn" onClick={() => adjustStock(p, -1)}>−</button>
+                                        <span className={'stock-val' + (isLow ? ' low' : '')}>{p.stock}</span>
+                                        <button className="qty-btn" onClick={() => adjustStock(p, +1)}>+</button>
+                                    </div>
+                                )}
+                                {!p.trackStock && <div className="product-row-stock"></div>}
                                 <div className="flex gap2">
                                     <button className="btn btn-ghost btn-sm" onClick={() => openDuplicate(p)} title="Duplikat">
                                         <Icon name="content_copy" size={16} />
@@ -166,7 +260,7 @@ export default function Products() {
                         <label>Kategori</label>
                         <select className="input" value={form.categoryId} onChange={e => setField('categoryId', e.target.value)}>
                             <option value="">— Tanpa Kategori —</option>
-                            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {categories?.map(c => <option key={c.id} value={c.id}>{fmtCapitalize(c.name)}</option>)}
                         </select>
                     </div>
                     <div className="form-group">
@@ -179,20 +273,35 @@ export default function Products() {
                             <input className="input" type="text" inputMode="numeric" placeholder="0" value={form.price ? Number(form.price).toLocaleString('id-ID') : ''} onChange={e => setField('price', e.target.value.replace(/\D/g, ''))} />
                         </div>
                         <div className="form-group">
-                            <label>Harga Pengecer (Rp)</label>
+                            <label>Harga Grosir (Rp)</label>
                             <input className="input" type="text" inputMode="numeric" placeholder="0" value={form.resellerPrice ? Number(form.resellerPrice).toLocaleString('id-ID') : ''} onChange={e => setField('resellerPrice', e.target.value.replace(/\D/g, ''))} />
                         </div>
                     </div>
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>Stok Awal</label>
-                            <input className="input" type="number" min="0" placeholder="0" value={form.stock} onChange={e => setField('stock', e.target.value)} />
-                        </div>
-                    </div>
                     <div className="form-group">
-                        <label>Batas Stok Rendah</label>
-                        <input className="input" type="number" min="0" placeholder="5" value={form.low_stock_threshold} onChange={e => setField('low_stock_threshold', e.target.value)} />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                                type="checkbox"
+                                checked={form.trackStock}
+                                onChange={e => setField('trackStock', e.target.checked)}
+                                style={{ width: '18px', height: '18px' }}
+                            />
+                            Aktifkan pelacakan stok
+                        </label>
                     </div>
+                    {form.trackStock && (
+                        <>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Stok Awal</label>
+                                    <input className="input" type="number" min="0" placeholder="0" value={form.stock} onChange={e => setField('stock', e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Batas Stok Rendah</label>
+                                <input className="input" type="number" min="0" placeholder="5" value={form.low_stock_threshold} onChange={e => setField('low_stock_threshold', e.target.value)} />
+                            </div>
+                        </>
+                    )}
                     <div className="flex gap3 mt2">
                         <button className="btn btn-ghost" onClick={() => setModal(null)}>Batal</button>
                         <button className="btn btn-primary btn-block" onClick={handleSave} disabled={loading || !form.name.trim() || !form.price}>
@@ -221,6 +330,42 @@ export default function Products() {
                         <button className="btn btn-danger" onClick={confirmDelete}>
                             <Icon name="delete" size={18} /> Ya, Hapus
                         </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Bulk upload modal */}
+            <Modal
+                open={bulkUploadModal}
+                onClose={() => setBulkUploadModal(false)}
+                title="Import Produk (CSV/Excel)"
+                width="500px"
+            >
+                <div className="flex-col gap4">
+                    <div style={{ background: 'var(--surface2)', padding: '16px', borderRadius: 'var(--r2)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '8px' }}>Format File:</div>
+                        <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text2)' }}>
+                            <li><strong>Excel (.xlsx/.xls)</strong>: Gunakan <strong>nama sheet</strong> sebagai kategori</li>
+                            <li><strong>CSV</strong>: Gunakan <strong>nama file</strong> sebagai kategori (tanpa extension)</li>
+                            <li>Kategori akan otomatis disimpan dalam huruf kecil</li>
+                            <li>Kolom yang dibutuhkan: <strong>nama</strong>, <strong>harga jual</strong></li>
+                            <li>Kolom opsional: <strong>harga grosir</strong>, <strong>barcode</strong></li>
+                        </ul>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Pilih File</label>
+                        <input
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            onChange={handleBulkUpload}
+                            disabled={bulkUploadLoading}
+                            style={{ width: '100%', padding: '12px', border: '2px dashed var(--border)', borderRadius: 'var(--r2)', background: 'var(--surface)' }}
+                        />
+                    </div>
+
+                    <div className="flex gap3">
+                        <button className="btn btn-ghost" onClick={() => setBulkUploadModal(false)} disabled={bulkUploadLoading}>Batal</button>
                     </div>
                 </div>
             </Modal>

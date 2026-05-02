@@ -4,6 +4,7 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { showToast } from '../components/Toast.jsx'
 import db from '../db/db.js'
+import { fmtCapitalize } from '../utils/format.js'
 import './Categories.css'
 
 export default function Categories() {
@@ -14,17 +15,17 @@ export default function Categories() {
     const [pendingDelete, setPendingDelete] = useState(null)
 
     function openAdd() { setName(''); setModal({ id: null }) }
-    function openEdit(cat) { setName(cat.name); setModal({ id: cat.id }) }
+    function openEdit(cat) { setName(fmtCapitalize(cat.name)); setModal({ id: cat.id }) }
 
     async function handleSave() {
         if (!name.trim()) return showToast('Nama kategori tidak boleh kosong', 'error')
         setLoading(true)
         try {
             if (modal.id) {
-                await db.categories.update(modal.id, { name: name.trim() })
+                await db.categories.update(modal.id, { name: name.trim().toLowerCase() })
                 showToast('Kategori diperbarui', 'success')
             } else {
-                await db.categories.add({ name: name.trim() })
+                await db.categories.add({ name: name.trim().toLowerCase() })
                 showToast('Kategori ditambahkan', 'success')
             }
             setModal(null)
@@ -69,7 +70,7 @@ export default function Categories() {
                 <div className="cat-list">
                     {categories?.map(cat => (
                         <div key={cat.id} className="cat-list-item">
-                            <span className="cat-list-name">{cat.name}</span>
+                            <span className="cat-list-name">{fmtCapitalize(cat.name)}</span>
                             <div className="flex gap2">
                                 <button className="btn btn-ghost btn-sm" onClick={() => openEdit(cat)}>
                                     <Icon name="edit" size={16} /> Edit
@@ -113,7 +114,7 @@ export default function Categories() {
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     <p style={{ margin: 0, lineHeight: 1.6 }}>
-                        Hapus kategori <strong>"{pendingDelete?.name}"</strong>?<br />
+                        Hapus kategori <strong>"{fmtCapitalize(pendingDelete?.name)}"</strong>?<br />
                         <span style={{ color: 'var(--text2)', fontSize: '0.88rem' }}>Aksi ini tidak bisa dibatalkan.</span>
                     </p>
                     <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

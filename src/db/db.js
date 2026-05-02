@@ -30,4 +30,14 @@ db.version(4).stores({
     debt_payments: '++id, debtId, createdAt',
 })
 
+// v5: adds resellerPrice (Harga Grosir) to products
+db.version(5).stores({
+    products: '++id, name, categoryId, price, stock, low_stock_threshold, barcode, resellerPrice',
+})
+
+// v6: adds trackStock flag to products (default false)
+db.version(6).stores({
+    products: '++id, name, categoryId, price, stock, low_stock_threshold, barcode, resellerPrice, trackStock',
+})
+
 export default db

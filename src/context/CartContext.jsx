@@ -10,17 +10,17 @@ export function CartProvider({ children }) {
         setRawItems(prev => {
             const existing = prev.find(i => i.productId === product.id)
             if (existing) {
-                if (existing.qty >= product.stock) return prev // can't exceed stock
+                if (product.trackStock && existing.qty >= product.stock) return prev // can't exceed stock only if trackStock is true
                 return prev.map(i => i.productId === product.id ? { ...i, qty: i.qty + 1 } : i)
             }
-            if (product.stock <= 0) return prev
+            if (product.trackStock && product.stock <= 0) return prev
             return [...prev, {
                 productId: product.id,
                 name: product.name,
                 retailPrice: product.price,
                 resellerPrice: product.resellerPrice || product.price,
                 qty: 1,
-                stock: product.stock
+                stock: product.trackStock ? product.stock : Infinity
             }]
         })
     }, [])
@@ -47,7 +47,7 @@ export function CartProvider({ children }) {
     const updateQty = useCallback((productId, qty) => {
         setRawItems(prev => prev.map(i => {
             if (i.productId !== productId) return i
-            const newQty = Math.max(1, Math.min(qty, i.stock))
+            const newQty = Math.max(1, i.stock === Infinity ? qty : Math.min(qty, i.stock))
             return { ...i, qty: newQty }
         }))
     }, [])
@@ -72,6 +72,7 @@ export function CartProvider({ children }) {
     )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useCart() {
     const ctx = useContext(CartContext)
     if (!ctx) throw new Error('useCart must be inside CartProvider')

@@ -7,7 +7,7 @@ import { showToast } from '../components/Toast.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import db from '../db/db.js'
 import { printReceipt } from '../utils/bluetooth.js'
-import { fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../utils/format.js'
+import { fmtCapitalize, fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../utils/format.js'
 import './POS.css'
 
 export default function POS() {
@@ -307,7 +307,7 @@ export default function POS() {
                             key={c.id}
                             className={'cat-btn' + (activeCat === c.id ? ' active' : '')}
                             onClick={() => setActiveCat(c.id)}
-                        >{c.name}</button>
+                        >{fmtCapitalize(c.name)}</button>
                     ))}
                 </div>
 
@@ -318,22 +318,32 @@ export default function POS() {
                             <p>Belum ada produk</p>
                         </div>
                     )}
-                    {products?.map(p => (
-                        <button
-                            key={p.id}
-                            className={'product-card' + (p.stock <= 0 ? ' out-of-stock' : '')}
-                            onClick={() => {
-                                if (p.stock <= 0) return showToast('Stok habis!', 'error')
-                                addItem(p)
-                            }}
-                        >
-                            <div className="product-name">{p.name}</div>
-                            <div className="product-price">{fmtCurrency(isReseller && p.resellerPrice ? p.resellerPrice : p.price)}</div>
-                            <div className={'product-stock' + (p.stock <= (p.low_stock_threshold || 0) ? ' low' : '')}>
-                                Stok: {p.stock}
-                            </div>
-                        </button>
-                    ))}
+                    {products?.map(p => {
+                        const isOutOfStock = p.trackStock && p.stock <= 0;
+                        return (
+                            <button
+                                key={p.id}
+                                className={'product-card' + (isOutOfStock ? ' out-of-stock' : '')}
+                                onClick={() => {
+                                    if (isOutOfStock) return showToast('Stok habis!', 'error');
+                                    addItem(p);
+                                }}
+                            >
+                                <div className="product-name">{p.name}</div>
+                                <div className="product-price">{fmtCurrency(isReseller && p.resellerPrice ? p.resellerPrice : p.price)}</div>
+                                {p.trackStock && (
+                                    <div className={'product-stock' + (p.stock <= (p.low_stock_threshold || 0) ? ' low' : '')}>
+                                        Stok: {p.stock}
+                                    </div>
+                                )}
+                                {!p.trackStock && (
+                                    <div className="product-stock" style={{ color: 'var(--text3)' }}>
+                                        Tanpa Stok
+                                    </div>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -346,7 +356,7 @@ export default function POS() {
                             Keranjang <span className="text2">({items.length} item)</span>
                         </h3>
                         <label className="reseller-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'var(--surface2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isReseller ? 'var(--primary)' : 'var(--text2)' }}>Pengecer</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isReseller ? 'var(--primary)' : 'var(--text2)' }}>Grosir</span>
                             <div style={{ position: 'relative', width: '32px', height: '18px', background: isReseller ? 'var(--primary)' : 'var(--border)', borderRadius: '10px', transition: 'all .2s' }}>
                                 <div style={{ position: 'absolute', top: '2px', left: isReseller ? '16px' : '2px', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', transition: 'all .2s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
                             </div>
@@ -423,16 +433,6 @@ export default function POS() {
                             title="Catat sebagai hutang"
                         >
                             <Icon name="credit_score" size={20} /> Hutang
-                        </button>
-                        <button
-                            id="qris-btn"
-                            className="btn btn-qris"
-                            style={{ flexShrink: 0 }}
-                            disabled={!canQris || qrisLoading}
-                            onClick={() => setQrisModal(true)}
-                            title="Bayar dengan QRIS"
-                        >
-                            <Icon name="qr_code_2" size={20} /> QRIS
                         </button>
                         <button
                             id="checkout-btn"
