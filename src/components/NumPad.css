@@ -43,3 +43,17 @@
 .numpad-exact:active {
     background: rgba(79, 70, 229, .18);
 }
+
+@media (max-height: 750px) {
+    .numpad {
+        gap: 6px;
+    }
+    .numpad-key {
+        min-height: 40px;
+        padding: 8px;
+        font-size: 1.1rem;
+    }
+    .numpad-exact {
+        min-height: 40px;
+    }
+}
