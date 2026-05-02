@@ -441,6 +441,16 @@ export default function POS() {
                             <Icon name="credit_score" size={20} /> Hutang
                         </button>
                         <button
+                            id="qris-btn"
+                            className="btn btn-qris"
+                            style={{ flexShrink: 0 }}
+                            disabled={!canQris || qrisLoading}
+                            onClick={() => setQrisModal(true)}
+                            title="Bayar dengan QRIS"
+                        >
+                            <Icon name="qr_code_2" size={20} /> QRIS
+                        </button>
+                        <button
                             id="checkout-btn"
                             className="btn btn-success btn-lg"
                             style={{ flex: 1 }}
