@@ -358,7 +358,7 @@
     font-size: 0.9rem;
 }
 /* ── Responsive POS Layout ───────────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 992px) {
     .pos-layout {
         flex-direction: column;
         height: auto;
