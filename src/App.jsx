@@ -71,6 +71,24 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const handleEnterDismissKeyboard = event => {
+      if (event.key !== 'Enter') return
+
+      const activeElement = document.activeElement
+      if (!(activeElement instanceof HTMLElement)) return
+      if (activeElement.tagName !== 'INPUT') return
+      if (activeElement.dataset.enterBlur === 'false') return
+
+      activeElement.blur()
+    }
+
+    document.addEventListener('keydown', handleEnterDismissKeyboard)
+    return () => {
+      document.removeEventListener('keydown', handleEnterDismissKeyboard)
+    }
+  }, [])
+
   return (
     <BrowserRouter>
       <CartProvider>
