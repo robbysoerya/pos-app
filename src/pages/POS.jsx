@@ -26,6 +26,7 @@ export default function POS() {
     const [customModal, setCustomModal] = useState(false)
     const [customForm, setCustomForm] = useState({ name: '', price: '', qty: '1' })
     const [newProductModal, setNewProductModal] = useState(null)
+    const [barcodePickerModal, setBarcodePickerModal] = useState(null)
     const barcodeRef = useRef()
 
     // Pay Later (Hutang) state
@@ -67,16 +68,21 @@ export default function POS() {
         e.preventDefault()
         const code = barcodeInput.trim()
         if (!code) return
-        const product = await db.products.where('barcode').equals(code).first()
-        if (!product) {
+        const matches = await db.products.where('barcode').equals(code).toArray()
+        if (matches.length === 0) {
             // If not found, open a form to register the new product
             setNewProductModal({ barcode: code, name: '', price: '', stock: '' })
             return
         }
-        addItem(product)
-        showToast(`${product.name} ditambahkan`, 'success')
-        setBarcodeInput('')
-        barcodeRef.current?.focus()
+        if (matches.length === 1) {
+            addItem(matches[0])
+            showToast(`${matches[0].name} ditambahkan`, 'success')
+            setBarcodeInput('')
+            barcodeRef.current?.focus()
+            return
+        }
+        // Multiple products share the same barcode — let user pick
+        setBarcodePickerModal({ barcode: code, products: matches })
     }
 
     async function handleCreateAndAddProduct() {
@@ -559,6 +565,46 @@ export default function POS() {
                                 <Icon name="save" size={18} /> Simpan & Tambah
                             </button>
                         </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* ── Barcode Picker Modal (duplicate barcodes) ── */}
+            <Modal open={!!barcodePickerModal} onClose={() => { setBarcodePickerModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }} title="Pilih Produk" width="420px">
+                {barcodePickerModal && (
+                    <div className="flex-col gap4">
+                        <div className="empty-state" style={{ padding: '8px', background: 'var(--surface2)', borderRadius: 'var(--r2)' }}>
+                            <Icon name="warning" size={24} style={{ color: 'var(--warning)' }} />
+                            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text2)' }}>
+                                Barcode <strong style={{ fontFamily: 'monospace' }}>{barcodePickerModal.barcode}</strong> ditemukan di {barcodePickerModal.products.length} produk
+                            </p>
+                        </div>
+                        <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {barcodePickerModal.products.map(p => (
+                                <button
+                                    key={p.id}
+                                    className="btn btn-ghost"
+                                    style={{ justifyContent: 'space-between', gap: '10px', padding: '12px', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 'var(--r2)' }}
+                                    onClick={() => {
+                                        addItem(p)
+                                        showToast(`${p.name} ditambahkan`, 'success')
+                                        setBarcodePickerModal(null)
+                                        setBarcodeInput('')
+                                        barcodeRef.current?.focus()
+                                    }}
+                                >
+                                    <div>
+                                        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{p.name}</div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>
+                                            {fmtCurrency(isReseller && p.resellerPrice ? p.resellerPrice : p.price)}
+                                            {p.trackStock && <span> · Stok: {p.stock}</span>}
+                                        </div>
+                                    </div>
+                                    <Icon name="add_circle" size={22} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                </button>
+                            ))}
+                        </div>
+                        <button className="btn btn-ghost" onClick={() => { setBarcodePickerModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }}>Batal</button>
                     </div>
                 )}
             </Modal>
