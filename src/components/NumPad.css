@@ -28,8 +28,14 @@
     color: var(--danger);
 }
 
-.numpad-exact {
+.numpad-bottom-row {
     grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+}
+
+.numpad-exact {
+    flex: 1;
     background: rgba(79, 70, 229, .08);
     border-color: rgba(79, 70, 229, .25);
     color: var(--primary);
@@ -44,6 +50,27 @@
     background: rgba(79, 70, 229, .18);
 }
 
+.numpad-reset {
+    flex-shrink: 0;
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text2);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.numpad-reset:active {
+    background: var(--surface3);
+}
+
+.numpad-reset:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 @media (max-height: 750px) {
     .numpad {
         gap: 6px;
@@ -55,5 +82,8 @@
     }
     .numpad-exact {
         min-height: 40px;
+    }
+    .numpad-bottom-row {
+        gap: 6px;
     }
 }

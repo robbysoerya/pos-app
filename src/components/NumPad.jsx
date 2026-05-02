@@ -8,7 +8,7 @@ const KEYS = [
     '000', '0', '⌫',
 ]
 
-export default function NumPad({ value, onChange, maxLength = 10, onExact, exactLabel }) {
+export default function NumPad({ value, onChange, maxLength = 10, onExact, exactLabel, onReset, resetDisabled }) {
     function press(key) {
         if (key === '⌫') {
             onChange(value.slice(0, -1) || '0')
@@ -31,15 +31,29 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                     {k === '⌫' ? <Icon name="backspace" size={20} /> : k}
                 </button>
             ))}
-            {onExact && (
-                <button
-                    className="numpad-key numpad-exact"
-                    onPointerDown={onExact}
-                    type="button"
-                >
-                    <Icon name="payments" size={18} />
-                    {exactLabel || 'Uang Pas'}
-                </button>
+            {(onReset || onExact) && (
+                <div className="numpad-bottom-row">
+                    {onReset && (
+                        <button
+                            className="numpad-key numpad-reset"
+                            onPointerDown={onReset}
+                            type="button"
+                            disabled={resetDisabled}
+                        >
+                            <Icon name="refresh" size={18} /> Reset
+                        </button>
+                    )}
+                    {onExact && (
+                        <button
+                            className="numpad-key numpad-exact"
+                            onPointerDown={onExact}
+                            type="button"
+                        >
+                            <Icon name="payments" size={18} />
+                            {exactLabel || 'Uang Pas'}
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     )

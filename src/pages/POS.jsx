@@ -421,16 +421,11 @@ export default function POS() {
                         value={paymentStr}
                         onChange={setPaymentStr}
                         onExact={() => setPaymentStr(String(total))}
+                        onReset={() => setConfirmResetModal(true)}
+                        resetDisabled={items.length === 0 && paymentStr === '0'}
                     />
 
                     <div className="checkout-actions">
-                        <button
-                            className="btn btn-ghost"
-                            onClick={() => setConfirmResetModal(true)}
-                            disabled={items.length === 0 && paymentStr === '0'}
-                        >
-                            <Icon name="refresh" size={18} /> Reset
-                        </button>
                         <button
                             className="btn btn-warning"
                             style={{ flexShrink: 0 }}
@@ -632,7 +627,7 @@ export default function POS() {
                             border: '2px solid color-mix(in srgb, var(--primary) 20%, transparent)',
                             borderRadius: 'var(--r3)',
                             padding: '8px',
-                            width: '100%',
+                            width: '70%',
                             maxWidth: '320px',
                         }}>
                             <img

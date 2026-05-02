@@ -50,6 +50,15 @@ export default function Products() {
     async function handleSave() {
         if (!form.name.trim()) return showToast('Nama produk diperlukan', 'error')
         if (!form.price || isNaN(Number(form.price))) return showToast('Harga tidak valid', 'error')
+        const barcodeVal = form.barcode.trim() || null
+        if (barcodeVal) {
+            const existing = await db.products.where('barcode').equals(barcodeVal).toArray()
+            const isDuplicate = existing.some(p => p.id !== modal.id)
+            if (isDuplicate) {
+                const dupeNames = existing.filter(p => p.id !== modal.id).map(p => p.name).join(', ')
+                return showToast(`Barcode sudah digunakan oleh: ${dupeNames}`, 'error')
+            }
+        }
         const payload = {
             name: form.name.trim(),
             categoryId: form.categoryId ? Number(form.categoryId) : null,
@@ -57,7 +66,7 @@ export default function Products() {
             resellerPrice: form.resellerPrice ? Number(form.resellerPrice) : Number(form.price),
             stock: form.trackStock ? (Number(form.stock) || 0) : 0,
             low_stock_threshold: form.trackStock ? (Number(form.low_stock_threshold) || 0) : 0,
-            barcode: form.barcode.trim() || null,
+            barcode: barcodeVal,
             trackStock: form.trackStock || false,
         }
         setLoading(true)
@@ -96,6 +105,7 @@ export default function Products() {
             const data = await file.arrayBuffer()
             const wb = XLSX.read(data, { type: 'array' })
             let totalProducts = 0
+            let updatedProducts = 0
 
             await db.transaction('rw', [db.categories, db.products], async () => {
                 for (let sheetIdx = 0; sheetIdx < wb.SheetNames.length; sheetIdx++) {
@@ -153,13 +163,31 @@ export default function Products() {
                             trackStock: false,
                         }
 
+                        // Upsert: if barcode exists, update existing product
+                        if (barcode) {
+                            const existing = await db.products.where('barcode').equals(barcode).first()
+                            if (existing) {
+                                await db.products.update(existing.id, {
+                                    name: nama,
+                                    categoryId,
+                                    price: hargaJual,
+                                    resellerPrice: hargaGrosir || hargaJual,
+                                })
+                                updatedProducts++
+                                continue
+                            }
+                        }
+
                         await db.products.add(payload)
                         totalProducts++
                     }
                 }
             })
 
-            showToast(`${totalProducts} produk berhasil diimport!`, 'success')
+            const parts = []
+            if (totalProducts > 0) parts.push(`${totalProducts} produk baru`)
+            if (updatedProducts > 0) parts.push(`${updatedProducts} produk diperbarui`)
+            showToast(`${parts.join(', ')} berhasil diimport!`, 'success')
             setBulkUploadModal(false)
         } catch (e) {
             showToast('Error: ' + e.message, 'error')
