@@ -18,6 +18,9 @@ export default function POS() {
     const [receiptModal, setReceiptModal] = useState(null)
     const [confirmBayarModal, setConfirmBayarModal] = useState(false)
     const [confirmResetModal, setConfirmResetModal] = useState(false)
+    const [qrisModal, setQrisModal] = useState(false)
+    const [qrisLoading, setQrisLoading] = useState(false)
+    const [qrisImage] = useState(() => localStorage.getItem('qris_image') || null)
     const [barcodeInput, setBarcodeInput] = useState('')
     const [searchInput, setSearchInput] = useState('')
     const [customModal, setCustomModal] = useState(false)
@@ -53,6 +56,7 @@ export default function POS() {
     const change = payment - total
     const canCheckout = items.length > 0 && payment >= total
     const canDebt = items.length > 0
+    const canQris = items.length > 0
 
     const filteredCustomers = (allCustomers || []).filter(c =>
         c.name.toLowerCase().includes(debtSearch.toLowerCase()) ||
@@ -149,6 +153,49 @@ export default function POS() {
             setCheckoutLoading(false)
         }
     }, [canCheckout, checkoutLoading, items, total, payment, change, clearCart])
+
+    const handleQrisCheckout = useCallback(async () => {
+        if (!canQris || qrisLoading) return
+        setQrisLoading(true)
+        try {
+            const now = new Date().toISOString()
+            const txnItems = items.map(i => ({
+                productId: i.productId, name: i.name, price: i.price, qty: i.qty,
+            }))
+
+            let txnId
+            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items')], async () => {
+                txnId = await db.transactions.add({
+                    createdAt: now, total, payment: total, change: 0,
+                    itemCount: items.length, paymentType: 'qris',
+                })
+                for (const item of items) {
+                    if (typeof item.productId === 'string' && item.productId.startsWith('custom_')) continue
+                    await db.products.where('id').equals(item.productId).modify(p => {
+                        p.stock = Math.max(0, p.stock - item.qty)
+                    })
+                    await db.stock_movements.add({
+                        productId: item.productId, delta: -item.qty,
+                        reason: 'sale', createdAt: now, transactionId: txnId,
+                    })
+                }
+                for (const item of txnItems) {
+                    await db.table('transaction_items').add({ transactionId: txnId, ...item })
+                }
+            })
+
+            const fullTxn = { id: txnId, createdAt: now, total, payment: total, change: 0, items: txnItems, paymentType: 'qris' }
+            clearCart()
+            setPaymentStr('0')
+            setQrisModal(false)
+            setReceiptModal(fullTxn)
+            showToast('Pembayaran QRIS berhasil!', 'success')
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error')
+        } finally {
+            setQrisLoading(false)
+        }
+    }, [canQris, qrisLoading, items, total, clearCart])
 
     const handleDebtCheckout = useCallback(async (customer) => {
         if (!canDebt || debtLoading) return
@@ -378,6 +425,16 @@ export default function POS() {
                             <Icon name="credit_score" size={20} /> Hutang
                         </button>
                         <button
+                            id="qris-btn"
+                            className="btn btn-qris"
+                            style={{ flexShrink: 0 }}
+                            disabled={!canQris || qrisLoading}
+                            onClick={() => setQrisModal(true)}
+                            title="Bayar dengan QRIS"
+                        >
+                            <Icon name="qr_code_2" size={20} /> QRIS
+                        </button>
+                        <button
                             id="checkout-btn"
                             className="btn btn-success btn-lg"
                             style={{ flex: 1 }}
@@ -508,6 +565,52 @@ export default function POS() {
 
             <Modal open={!!receiptModal} onClose={() => setReceiptModal(null)} title="Transaksi Berhasil" width="420px">
                 {receiptModal && <ReceiptPreview txn={receiptModal} onClose={() => setReceiptModal(null)} />}
+            </Modal>
+
+            {/* ── QRIS Payment Modal ── */}
+            <Modal open={qrisModal} onClose={() => setQrisModal(false)} title="Pembayaran QRIS" width="400px">
+                <div className="flex-col gap4" style={{ alignItems: 'center', textAlign: 'center' }}>
+                    {qrisImage ? (
+                        <div style={{
+                            background: 'linear-gradient(135deg, #e8f4fd 0%, #f0fdf4 100%)',
+                            border: '2px solid color-mix(in srgb, var(--primary) 20%, transparent)',
+                            borderRadius: 'var(--r3)',
+                            padding: '8px',
+                            width: '100%',
+                            maxWidth: '320px',
+                        }}>
+                            <img
+                                src={qrisImage}
+                                alt="QRIS QR Code"
+                                style={{ width: '100%', borderRadius: 'var(--r2)', display: 'block' }}
+                            />
+                        </div>
+                    ) : (
+                        <div style={{ padding: '24px', background: 'var(--surface2)', borderRadius: 'var(--r3)', border: '2px dashed var(--border)', width: '100%', color: 'var(--text2)', fontSize: '0.875rem' }}>
+                            <Icon name="qr_code_2" size={40} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                            Gambar QRIS belum diatur.<br />
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>Pergi ke Pengaturan → QRIS untuk upload gambar.</span>
+                        </div>
+                    )}
+                    <div style={{ background: 'var(--surface2)', borderRadius: 'var(--r2)', padding: '12px 20px', width: '100%', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text2)', marginBottom: '4px' }}>Total yang harus dibayar</div>
+                        <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '-0.5px' }}>{fmtCurrency(total)}</div>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text2)', lineHeight: 1.5 }}>
+                        Minta pelanggan scan QR di atas, lalu konfirmasi setelah pembayaran diterima.
+                    </p>
+                    <div className="flex gap3" style={{ width: '100%' }}>
+                        <button className="btn btn-ghost" onClick={() => setQrisModal(false)}>Batal</button>
+                        <button
+                            id="qris-confirm-btn"
+                            className="btn btn-success btn-block"
+                            disabled={!canQris || qrisLoading}
+                            onClick={handleQrisCheckout}
+                        >
+                            {qrisLoading ? <><Icon name="hourglass_top" size={18} /> Proses...</> : <><Icon name="check_circle" size={18} filled /> Pembayaran Diterima</>}
+                        </button>
+                    </div>
+                </div>
             </Modal>
 
             {/* ── Pay Later: Customer Picker Modal ── */}
@@ -715,6 +818,12 @@ function ReceiptPreview({ txn, onClose }) {
                     </span>
                 </div>
             )}
+            {txn.paymentType === 'qris' && (
+                <div style={{ background: 'color-mix(in srgb, #2563eb 10%, transparent)', border: '1px solid color-mix(in srgb, #2563eb 25%, transparent)', borderRadius: 'var(--r2)', padding: '8px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Icon name="qr_code_2" size={18} style={{ color: '#2563eb' }} />
+                    <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.875rem' }}>QRIS</span>
+                </div>
+            )}
             <div className="receipt-row"><span>Waktu</span><span>{fmtDateTime(txn.createdAt)}</span></div>
             <div className="receipt-row"><span>No. Transaksi</span><span>{fmtTxnId(txn.id)}</span></div>
             <div className="divider" />
@@ -735,6 +844,11 @@ function ReceiptPreview({ txn, onClose }) {
                     <div className="receipt-row" style={{ color: 'var(--danger,#ef4444)', fontWeight: 600 }}>
                         <span>Status</span><span>Sisa {fmtCurrency(txn.total - txn.payment)} (Hutang)</span>
                     </div>
+                </>
+            ) : txn.paymentType === 'qris' ? (
+                <>
+                    <div className="receipt-row"><span>Metode</span><span style={{ color: '#2563eb', fontWeight: 600 }}>QRIS</span></div>
+                    <div className="receipt-row text-success"><span>Lunas</span><span>{fmtCurrency(txn.total)}</span></div>
                 </>
             ) : (
                 <>

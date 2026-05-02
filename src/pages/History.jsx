@@ -193,6 +193,9 @@ export default function History() {
                                     {item.paymentType === 'debt' && (
                                     <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.65rem' }}>HUTANG</span>
                                 )}
+                                    {item.paymentType === 'qris' && (
+                                    <span className="badge badge-qris" style={{ marginLeft: 6, fontSize: '0.65rem' }}>QRIS</span>
+                                )}
                             </div>
                             <div className="txn-meta">
                                     <span>{fmtDateTime(item.createdAt)}</span>
@@ -239,6 +242,12 @@ export default function History() {
                                 </span>
                             </div>
                         )}
+                        {detail.txn.paymentType === 'qris' && (
+                            <div style={{ background: 'color-mix(in srgb, #2563eb 10%, transparent)', border: '1px solid color-mix(in srgb, #2563eb 25%, transparent)', borderRadius: 'var(--r2)', padding: '8px 12px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Icon name="qr_code_2" size={18} style={{ color: '#2563eb' }} />
+                                <span style={{ fontWeight: 700, color: '#2563eb', fontSize: '0.875rem' }}>QRIS</span>
+                            </div>
+                        )}
                         <div className="flex justify-between text2 mb4">
                             <span>{fmtDateTime(detail.txn.createdAt)}</span>
                             <span>{detail.items.length} item</span>
@@ -270,6 +279,19 @@ export default function History() {
                                     <span>Status</span>
                                     <span />
                                     <span>Sisa {fmtCurrency(detail.txn.total - detail.txn.payment)} (Hutang)</span>
+                                </div>
+                            </>
+                        ) : detail.txn.paymentType === 'qris' ? (
+                            <>
+                                <div className="detail-row">
+                                    <span>Metode</span>
+                                    <span />
+                                    <span style={{ color: '#2563eb', fontWeight: 600 }}>QRIS</span>
+                                </div>
+                                <div className="detail-row text-success">
+                                    <span>Lunas</span>
+                                    <span />
+                                    <span>{fmtCurrency(detail.txn.total)}</span>
                                 </div>
                             </>
                         ) : (

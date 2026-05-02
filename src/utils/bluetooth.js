@@ -97,6 +97,9 @@ async function sendData(bytes) {
     const CHUNK = 512
     for (let i = 0; i < bytes.length; i += CHUNK) {
         await _char.writeValueWithoutResponse(new Uint8Array(bytes.slice(i, i + CHUNK)))
+        // Give the printer's TX buffer time to flush; without this delay
+        // back-to-back BLE writes cause the printer to silently drop chunks.
+        await new Promise(r => setTimeout(r, 20))
     }
 }
 
@@ -164,8 +167,14 @@ function buildReceipt(txn, storeName) {
     push(...text('--------------------------------'))
 
     txn.items.forEach(item => {
-        push(...text(`${item.name}`))
-        push(...text(pad(`  ${item.qty}x ${fmtCurrency(item.price)}`, fmtCurrency(item.price * item.qty))))
+        // Truncate long names so they don't overflow the 32-char paper width
+        const maxName = 32
+        const name = item.name.length > maxName ? item.name.slice(0, maxName - 1) + '…' : item.name
+        push(...text(name))
+        // left: "  qty x unitPrice"  |  right: lineTotal
+        const left = `  ${item.qty}x ${fmtCurrency(item.price)}`
+        const right = fmtCurrency(item.price * item.qty)
+        push(...text(pad(left, right)))
     })
 
     push(...text('--------------------------------'))

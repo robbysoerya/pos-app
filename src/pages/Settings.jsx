@@ -23,6 +23,8 @@ export default function Settings() {
     const [showClearModal, setShowClearModal] = useState(false)
     const [showExportFallbackModal, setShowExportFallbackModal] = useState(false)
     const [exportErrorMsg, setExportErrorMsg] = useState('')
+    const [qrisImage, setQrisImage] = useState(() => localStorage.getItem('qris_image') || null)
+    const qrisFileRef = useRef()
     const fileRef = useRef()
 
     const backupRow = useLiveQuery(() => db.settings.get('lastBackupTime'), [])
@@ -44,6 +46,27 @@ export default function Settings() {
     async function saveStoreName() {
         await db.settings.put({ key: 'storeName', value: storeName.trim() || 'My Store' })
         showToast('Nama toko disimpan', 'success')
+    }
+
+    function handleQrisImageChange(e) {
+        const file = e.target.files?.[0]
+        if (!file) return
+        if (!file.type.startsWith('image/')) return showToast('File harus berupa gambar', 'error')
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            const dataUrl = ev.target.result
+            localStorage.setItem('qris_image', dataUrl)
+            setQrisImage(dataUrl)
+            showToast('Gambar QRIS disimpan', 'success')
+        }
+        reader.readAsDataURL(file)
+        qrisFileRef.current.value = ''
+    }
+
+    function clearQrisImage() {
+        localStorage.removeItem('qris_image')
+        setQrisImage(null)
+        showToast('Gambar QRIS dihapus', 'info')
     }
 
     async function saveTelegramConfig() {
@@ -163,6 +186,39 @@ export default function Settings() {
                             <button className="btn btn-primary" onClick={saveStoreName}>
                                 <Icon name="save" size={18} /> Simpan
                             </button>
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="qr_code_2" size={20} style={{ marginRight: 6 }} />Gambar QRIS</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
+                            Upload foto/gambar QRIS Anda. Disimpan di perangkat ini saja — tidak ikut backup.
+                        </p>
+                        {qrisImage && (
+                            <div style={{ marginBottom: 12, position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                                <img
+                                    src={qrisImage}
+                                    alt="QRIS Preview"
+                                    style={{ maxWidth: '240px', width: '100%', borderRadius: 'var(--r2)', border: '1.5px solid var(--border)', display: 'block' }}
+                                />
+                            </div>
+                        )}
+                        <div className="flex gap3">
+                            <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                                <Icon name="upload" size={18} /> {qrisImage ? 'Ganti Gambar' : 'Upload Gambar'}
+                                <input
+                                    ref={qrisFileRef}
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={handleQrisImageChange}
+                                />
+                            </label>
+                            {qrisImage && (
+                                <button className="btn btn-ghost" onClick={clearQrisImage}>
+                                    <Icon name="delete" size={18} /> Hapus
+                                </button>
+                            )}
                         </div>
                     </section>
 
