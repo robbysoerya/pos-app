@@ -28,6 +28,7 @@ export default function POS() {
     const [newProductModal, setNewProductModal] = useState(null)
     const [barcodePickerModal, setBarcodePickerModal] = useState(null)
     const barcodeRef = useRef()
+    const lastScanRef = useRef({ code: '', at: 0 })
 
     // Pay Later (Hutang) state
     const [debtModal, setDebtModal] = useState(false)
@@ -39,6 +40,8 @@ export default function POS() {
 
     const categories = useLiveQuery(() => db.categories.toArray(), [])
     const allCustomers = useLiveQuery(() => db.customers.toArray(), [])
+    const unknownBarcodeActionRow = useLiveQuery(() => db.settings.get('unknownBarcodeAction'), [])
+    const unknownBarcodeAction = unknownBarcodeActionRow?.value || 'prompt_create'
     const products = useLiveQuery(
         async () => {
             let q = db.products
@@ -68,9 +71,20 @@ export default function POS() {
         e.preventDefault()
         const code = barcodeInput.trim()
         if (!code) return
+        const now = Date.now()
+        if (lastScanRef.current.code === code && now - lastScanRef.current.at < 500) {
+            return
+        }
+        lastScanRef.current = { code, at: now }
         const matches = await db.products.where('barcode').equals(code).toArray()
         if (matches.length === 0) {
-            // If not found, open a form to register the new product
+            if (unknownBarcodeAction === 'reject') {
+                showToast(`Barcode tidak terdaftar: ${code}`, 'error')
+                setBarcodeInput('')
+                barcodeRef.current?.focus()
+                return
+            }
+            // If not found, open a form to register the new product (default behavior)
             setNewProductModal({ barcode: code, name: '', price: '', stock: '' })
             return
         }

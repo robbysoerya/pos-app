@@ -24,6 +24,7 @@ export default function Settings() {
     const [showExportFallbackModal, setShowExportFallbackModal] = useState(false)
     const [exportErrorMsg, setExportErrorMsg] = useState('')
     const [qrisImage, setQrisImage] = useState(() => localStorage.getItem('qris_image') || null)
+    const [unknownBarcodeAction, setUnknownBarcodeAction] = useState('prompt_create')
     const qrisFileRef = useRef()
     const fileRef = useRef()
 
@@ -35,6 +36,7 @@ export default function Settings() {
         db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
         db.settings.get('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
         db.settings.get('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
+        db.settings.get('unknownBarcodeAction').then(s => { if (s?.value) setUnknownBarcodeAction(s.value) })
     }, [])
 
     useEffect(() => {
@@ -73,6 +75,11 @@ export default function Settings() {
         await db.settings.put({ key: 'telegramToken', value: telegramToken.trim() })
         await db.settings.put({ key: 'telegramChatId', value: telegramChatId.trim() })
         showToast('Pengaturan Telegram disimpan', 'success')
+    }
+
+    async function saveBarcodeConfig() {
+        await db.settings.put({ key: 'unknownBarcodeAction', value: unknownBarcodeAction })
+        showToast('Pengaturan barcode disimpan', 'success')
     }
 
     async function handleConnect() {
@@ -219,6 +226,26 @@ export default function Settings() {
                                     <Icon name="delete" size={18} /> Hapus
                                 </button>
                             )}
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="barcode_scanner" size={20} style={{ marginRight: 6 }} />Pengaturan Barcode</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
+                            Tentukan perilaku saat barcode yang discan di Kasir belum terdaftar.
+                        </p>
+                        <div className="flex gap3">
+                            <select
+                                className="input"
+                                value={unknownBarcodeAction}
+                                onChange={e => setUnknownBarcodeAction(e.target.value)}
+                            >
+                                <option value="prompt_create">Tampilkan form tambah produk</option>
+                                <option value="reject">Tolak & tampilkan peringatan</option>
+                            </select>
+                            <button className="btn btn-primary" onClick={saveBarcodeConfig}>
+                                <Icon name="save" size={18} /> Simpan
+                            </button>
                         </div>
                     </section>
 

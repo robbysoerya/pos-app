@@ -36,7 +36,7 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                     {onReset && (
                         <button
                             className="numpad-key numpad-reset"
-                            onPointerDown={onReset}
+                            onClick={onReset}
                             type="button"
                             disabled={resetDisabled}
                         >
@@ -46,7 +46,7 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                     {onExact && (
                         <button
                             className="numpad-key numpad-exact"
-                            onPointerDown={onExact}
+                            onClick={onExact}
                             type="button"
                         >
                             <Icon name="payments" size={18} />

@@ -51,14 +51,6 @@ export default function Products() {
         if (!form.name.trim()) return showToast('Nama produk diperlukan', 'error')
         if (!form.price || isNaN(Number(form.price))) return showToast('Harga tidak valid', 'error')
         const barcodeVal = form.barcode.trim() || null
-        if (barcodeVal) {
-            const existing = await db.products.where('barcode').equals(barcodeVal).toArray()
-            const isDuplicate = existing.some(p => p.id !== modal.id)
-            if (isDuplicate) {
-                const dupeNames = existing.filter(p => p.id !== modal.id).map(p => p.name).join(', ')
-                return showToast(`Barcode sudah digunakan oleh: ${dupeNames}`, 'error')
-            }
-        }
         const payload = {
             name: form.name.trim(),
             categoryId: form.categoryId ? Number(form.categoryId) : null,
@@ -163,11 +155,13 @@ export default function Products() {
                             trackStock: false,
                         }
 
-                        // Upsert: if barcode exists, update existing product
+                        // Update only when both barcode + name match.
+                        // This allows variants (e.g. pack/sachet) to share same barcode.
                         if (barcode) {
-                            const existing = await db.products.where('barcode').equals(barcode).first()
-                            if (existing) {
-                                await db.products.update(existing.id, {
+                            const existing = await db.products.where('barcode').equals(barcode).toArray()
+                            const sameName = existing.find(p => p.name.toLowerCase() === nama.toLowerCase())
+                            if (sameName) {
+                                await db.products.update(sameName.id, {
                                     name: nama,
                                     categoryId,
                                     price: hargaJual,
