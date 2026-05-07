@@ -369,25 +369,25 @@ export default function POS() {
 
             {/* Right: Cart + Payment */}
             <div className="pos-right">
-                <div className="cart-section scroll">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 8px' }}>
-                        <h3 className="cart-title" style={{ padding: 0, margin: 0 }}>
-                            <Icon name="shopping_cart" size={18} />
-                            Keranjang <span className="text2">({items.length} item)</span>
-                        </h3>
-                        <label className="reseller-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'var(--surface2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isReseller ? 'var(--primary)' : 'var(--text2)' }}>Grosir</span>
-                            <div style={{ position: 'relative', width: '32px', height: '18px', background: isReseller ? 'var(--primary)' : 'var(--border)', borderRadius: '10px', transition: 'all .2s' }}>
-                                <div style={{ position: 'absolute', top: '2px', left: isReseller ? '16px' : '2px', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', transition: 'all .2s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
-                            </div>
-                            <input
-                                type="checkbox"
-                                checked={isReseller}
-                                onChange={e => setIsReseller(e.target.checked)}
-                                style={{ display: 'none' }}
-                            />
-                        </label>
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 12px 8px 12px', background: 'var(--surface)', flexShrink: 0, borderBottom: '1.5px solid var(--border)' }}>
+                    <h3 className="cart-title" style={{ padding: 0, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Icon name="shopping_cart" size={18} />
+                        Keranjang <span className="text2" style={{ fontSize: '0.85rem', fontWeight: 'normal' }}>({items.length} item)</span>
+                    </h3>
+                    <label className="reseller-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'var(--surface2)', padding: '4px 10px', borderRadius: '99px', border: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isReseller ? 'var(--primary)' : 'var(--text2)' }}>Grosir</span>
+                        <div style={{ position: 'relative', width: '32px', height: '18px', background: isReseller ? 'var(--primary)' : 'var(--border)', borderRadius: '10px', transition: 'all .2s' }}>
+                            <div style={{ position: 'absolute', top: '2px', left: isReseller ? '16px' : '2px', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', transition: 'all .2s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={isReseller}
+                            onChange={e => setIsReseller(e.target.checked)}
+                            style={{ display: 'none' }}
+                        />
+                    </label>
+                </div>
+                <div className="cart-section scroll" style={{ paddingTop: '8px' }}>
                     {items.length === 0 && (
                         <div className="empty-state" style={{ padding: '24px' }}>
                             <Icon name="shopping_cart" size={48} className="empty-icon" />

@@ -52,7 +52,10 @@ export function CartProvider({ children }) {
         }))
     }, [])
 
-    const clearCart = useCallback(() => setRawItems([]), [])
+    const clearCart = useCallback(() => {
+        setRawItems([])
+        setIsReseller(false)
+    }, [])
 
     const items = rawItems.map(i => ({
         ...i,
