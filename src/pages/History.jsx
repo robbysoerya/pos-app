@@ -13,16 +13,24 @@ export default function History() {
         db.transactions.orderBy('createdAt').reverse().toArray(), [])
 
     const [detail, setDetail] = useState(null)
-    const today = new Date().toISOString().split('T')[0]
+
+    const getLocalDateString = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const today = getLocalDateString(new Date());
     const [startDate, setStartDate] = useState(today)
     const [endDate, setEndDate] = useState(today)
     const [typeFilter, setTypeFilter] = useState('all')
 
     function isWithinRange(dateStr) {
         if (!dateStr) return false;
-        const d = dateStr.split('T')[0];
-        if (startDate && d < startDate) return false;
-        if (endDate && d > endDate) return false;
+        const localDateStr = getLocalDateString(new Date(dateStr));
+        if (startDate && localDateStr < startDate) return false;
+        if (endDate && localDateStr > endDate) return false;
         return true;
     }
 
