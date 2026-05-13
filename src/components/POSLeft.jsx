@@ -152,7 +152,7 @@ export default function POSLeft() {
                         )}
                     </div>
                     <button className="btn btn-primary btn-sm" style={{ flexShrink: 0, padding: '0 12px', height: '36px' }} onClick={() => setCustomModal(true)}>
-                        <Icon name="post_add" size={18} /> Item Kustom
+                        <Icon name="post_add" size={18} /> Produk Manual
                     </button>
                 </div>
 
@@ -225,7 +225,7 @@ export default function POSLeft() {
                     })}
                 </div>
             </div>
-            <Modal open={customModal} onClose={() => setCustomModal(false)} title="Tambah Item Kustom" width="400px">
+            <Modal open={customModal} onClose={() => setCustomModal(false)} title="Tambah Produk Manual" width="400px">
                 <div className="flex-col gap4">
                     <div className="form-group">
                         <label>Nama Item</label>

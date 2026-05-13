@@ -321,7 +321,7 @@ export default function Products() {
                                 onChange={e => setField('trackStock', e.target.checked)}
                                 style={{ width: '18px', height: '18px' }}
                             />
-                            Aktifkan pelacakan stok
+                            Aktifkan stok
                         </label>
                     </div>
                     {form.trackStock && (

@@ -306,7 +306,7 @@ export default function Piutang() {
                                                 onClick={() => setPayTotalModal(true)}
                                                 title="Bayar keseluruhan hutang pelanggan ini"
                                             >
-                                                <Icon name="payments" size={16} /> Bayar Piutang
+                                                <Icon name="payments" size={16} /> Bayar Hutang
                                             </button>
                                         </div>
                                     )

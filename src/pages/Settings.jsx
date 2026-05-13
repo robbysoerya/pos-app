@@ -336,17 +336,6 @@ export default function Settings() {
                         </div>
                     </section>
 
-                    <section className="settings-card">
-                        <h2><Icon name="install_mobile" size={20} style={{ marginRight: 6 }} />Install App</h2>
-                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
-                            Install sebagai aplikasi di tablet untuk pengalaman layar penuh.
-                        </p>
-                        <button className="btn btn-primary" onClick={handleInstall}>
-                            <Icon name="install_mobile" size={18} />
-                            {deferredPrompt ? 'Install Sekarang' : 'Buka dari address bar Chrome'}
-                        </button>
-                    </section>
-
                     <section className="settings-card danger-zone">
                         <h2><Icon name="warning" size={20} filled style={{ marginRight: 6, color: 'var(--danger)' }} />Zona Bahaya</h2>
                         <button className="btn btn-danger" onClick={() => setShowClearModal(true)}>
