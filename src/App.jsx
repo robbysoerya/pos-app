@@ -4,6 +4,7 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 import './App.css'
 import Icon from './components/Icon.jsx'
 import { Toast } from './components/Toast.jsx'
+import PWAUpdate from './components/PWAUpdate.jsx'
 import db from './db/db.js'
 import Categories from './pages/Categories.jsx'
 import History from './pages/History.jsx'
@@ -128,6 +129,7 @@ export default function App() {
         </main>
       </div>
       <Toast />
+      <PWAUpdate />
     </BrowserRouter>
   )
 }
