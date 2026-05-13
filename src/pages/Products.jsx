@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
@@ -22,6 +22,18 @@ export default function Products() {
     const [pendingDelete, setPendingDelete] = useState(null)
     const [bulkUploadModal, setBulkUploadModal] = useState(false)
     const [bulkUploadLoading, setBulkUploadLoading] = useState(false)
+    const [limit, setLimit] = useState(50)
+
+    const observer = useRef(null)
+    const lastElementRef = useCallback(node => {
+        if (observer.current) observer.current.disconnect()
+        observer.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting) {
+                setLimit(prev => prev + 50)
+            }
+        }, { rootMargin: '200px' })
+        if (node) observer.current.observe(node)
+    }, [])
 
     function openAdd() {
         setForm({ ...EMPTY_FORM, categoryId: categories?.[0]?.id ?? '' })
@@ -192,6 +204,7 @@ export default function Products() {
     }
 
     const filtered = (products || []).filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+    const displayedProducts = filtered.slice(0, limit)
     const catMap = Object.fromEntries((categories || []).map(c => [c.id, fmtCapitalize(c.name)]))
 
     return (
@@ -216,7 +229,7 @@ export default function Products() {
                         style={{ paddingLeft: 44 }}
                         placeholder="Cari produk..."
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
+                        onChange={e => { setSearch(e.target.value); setLimit(50); }}
                     />
                 </div>
 
@@ -229,11 +242,12 @@ export default function Products() {
                 )}
 
                 <div className="product-table">
-                    {filtered.map(p => {
+                    {displayedProducts.map((p, index) => {
                         const isLow = p.trackStock && p.stock <= (p.low_stock_threshold || 0)
                         const isOut = p.trackStock && p.stock <= 0
+                        const isLast = index === displayedProducts.length - 1
                         return (
-                            <div key={p.id} className="product-row">
+                            <div key={p.id} className="product-row" ref={isLast ? lastElementRef : null}>
                                 <div className="product-row-info">
                                     <div className="product-row-name">{p.name}</div>
                                     <div className="product-row-meta">

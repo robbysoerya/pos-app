@@ -4,7 +4,6 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 import './App.css'
 import Icon from './components/Icon.jsx'
 import { Toast } from './components/Toast.jsx'
-import { CartProvider } from './context/CartContext.jsx'
 import db from './db/db.js'
 import Categories from './pages/Categories.jsx'
 import History from './pages/History.jsx'
@@ -91,46 +90,44 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <CartProvider>
-        <div className="app-shell">
-          <nav className="sidebar">
-            <div className="sidebar-logo">
-              <Icon name="storefront" size={28} filled className="logo-icon" />
-              <span className="logo-text">POS</span>
-            </div>
-            {NAV.map(n => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-                style={{ position: 'relative' }}
-              >
-                <Icon name={n.icon} size={24} className="nav-icon" />
-                <span className="nav-label">{n.label}</span>
-                {n.to === '/settings' && needsBackup && (
-                  <div style={{ position: 'absolute', top: '10px', right: '16px', width: '10px', height: '10px', background: 'var(--danger, #ef4444)', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface)' }} />
-                )}
-                {n.to === '/piutang' && outstandingDebtCount > 0 && (
-                  <div style={{ position: 'absolute', top: '10px', right: '16px', width: '10px', height: '10px', background: 'var(--danger, #ef4444)', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface)' }} />
-                )}
-              </NavLink>
-            ))}
-          </nav>
+      <div className="app-shell">
+        <nav className="sidebar">
+          <div className="sidebar-logo">
+            <Icon name="storefront" size={28} filled className="logo-icon" />
+            <span className="logo-text">POS</span>
+          </div>
+          {NAV.map(n => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.to === '/'}
+              className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              style={{ position: 'relative' }}
+            >
+              <Icon name={n.icon} size={24} className="nav-icon" />
+              <span className="nav-label">{n.label}</span>
+              {n.to === '/settings' && needsBackup && (
+                <div style={{ position: 'absolute', top: '10px', right: '16px', width: '10px', height: '10px', background: 'var(--danger, #ef4444)', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface)' }} />
+              )}
+              {n.to === '/piutang' && outstandingDebtCount > 0 && (
+                <div style={{ position: 'absolute', top: '10px', right: '16px', width: '10px', height: '10px', background: 'var(--danger, #ef4444)', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface)' }} />
+              )}
+            </NavLink>
+          ))}
+        </nav>
 
-          <main className="app-main">
-            <Routes>
-              <Route path="/" element={<POS />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/categories" element={<Categories />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/piutang" element={<Piutang />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </main>
-        </div>
-        <Toast />
-      </CartProvider>
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={<POS />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/piutang" element={<Piutang />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
+      </div>
+      <Toast />
     </BrowserRouter>
   )
 }
