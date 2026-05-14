@@ -262,10 +262,14 @@ export default function History() {
                         </div>
                         <div className="divider" />
                         {detail.items.map((item, i) => (
-                            <div key={i} className="detail-row">
-                                <span>{item.name}</span>
-                                <span className="text2">x{item.qty}</span>
-                                <span>{fmtCurrency(item.price * item.qty)}</span>
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '0.95rem' }}>{item.name}</span>
+                                    <span className="text2" style={{ fontSize: '0.8rem', marginTop: '2px' }}>
+                                        {item.qty} x {fmtCurrency(item.price)}
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 500, paddingTop: '2px' }}>{fmtCurrency(item.price * item.qty)}</span>
                             </div>
                         ))}
                         <div className="divider" />

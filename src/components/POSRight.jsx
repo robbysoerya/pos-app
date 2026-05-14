@@ -549,10 +549,14 @@ function ReceiptPreview({ txn, onClose }) {
             <div className="receipt-row"><span>No. Transaksi</span><span>{fmtTxnId(txn.id)}</span></div>
             <div className="divider" />
             {txn.items.map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '4px 0', fontSize: '0.9rem' }}>
-                    <span style={{ flex: 1 }}>{item.name}</span>
-                    <span className="text2" style={{ textAlign: 'center', minWidth: '48px', margin: '0 12px' }}>x{item.qty}</span>
-                    <span style={{ textAlign: 'right' }}>{fmtCurrency(item.price * item.qty)}</span>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.95rem' }}>{item.name}</span>
+                        <span className="text2" style={{ fontSize: '0.8rem', marginTop: '2px' }}>
+                            {item.qty} x {fmtCurrency(item.price)}
+                        </span>
+                    </div>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 500, paddingTop: '2px' }}>{fmtCurrency(item.price * item.qty)}</span>
                 </div>
             ))}
             <div className="divider" />

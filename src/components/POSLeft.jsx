@@ -215,11 +215,6 @@ export default function POSLeft() {
                                         Stok: {p.stock}
                                     </div>
                                 )}
-                                {!p.trackStock && (
-                                    <div className="product-stock" style={{ color: 'var(--text3)' }}>
-                                        Tanpa Stok
-                                    </div>
-                                )}
                             </button>
                         );
                     })}
@@ -228,10 +223,10 @@ export default function POSLeft() {
             <Modal open={customModal} onClose={() => setCustomModal(false)} title="Tambah Produk Manual" width="400px">
                 <div className="flex-col gap4">
                     <div className="form-group">
-                        <label>Nama Item</label>
+                        <label>Nama Produk</label>
                         <input
                             className="input"
-                            placeholder="Contoh: Ongkos Kirim"
+                            placeholder="Contoh: Kemiri 3ons"
                             value={customForm.name}
                             onChange={e => setCustomForm(f => ({ ...f, name: e.target.value }))}
                             autoFocus
