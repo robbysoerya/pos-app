@@ -3,6 +3,7 @@ import { create } from 'zustand'
 export const useCartStore = create((set, get) => ({
     rawItems: [],
     isReseller: false,
+    heldCarts: [],
 
     setIsReseller: (val) => set({ isReseller: val }),
 
@@ -63,4 +64,33 @@ export const useCartStore = create((set, get) => ({
     }),
 
     clearCart: () => set({ rawItems: [], isReseller: false }),
+
+    holdCart: (note) => set(state => {
+        if (state.rawItems.length === 0) return state;
+        return {
+            heldCarts: [...state.heldCarts, {
+                id: Date.now().toString(),
+                timestamp: new Date().toISOString(),
+                note: note || `Transaksi Tertahan (${new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})})`,
+                rawItems: [...state.rawItems],
+                isReseller: state.isReseller
+            }],
+            rawItems: [],
+            isReseller: false
+        }
+    }),
+
+    resumeCart: (id) => set(state => {
+        const cart = state.heldCarts.find(c => c.id === id);
+        if (!cart) return state;
+        return {
+            rawItems: cart.rawItems,
+            isReseller: cart.isReseller,
+            heldCarts: state.heldCarts.filter(c => c.id !== id)
+        }
+    }),
+
+    removeHeldCart: (id) => set(state => ({
+        heldCarts: state.heldCarts.filter(c => c.id !== id)
+    }))
 }))

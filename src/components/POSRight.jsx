@@ -14,6 +14,10 @@ export default function POSRight() {
     const removeItem = useCartStore(s => s.removeItem)
     const updateQty = useCartStore(s => s.updateQty)
     const clearCart = useCartStore(s => s.clearCart)
+    const heldCarts = useCartStore(s => s.heldCarts)
+    const holdCart = useCartStore(s => s.holdCart)
+    const resumeCart = useCartStore(s => s.resumeCart)
+    const removeHeldCart = useCartStore(s => s.removeHeldCart)
 
     const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
     const [paymentStr, setPaymentStr] = useState('0')
@@ -30,6 +34,11 @@ export default function POSRight() {
     const [showNewCustomer, setShowNewCustomer] = useState(false)
     const [confirmDebtCustomer, setConfirmDebtCustomer] = useState(null)
     const [debtLoading, setDebtLoading] = useState(false)
+
+    const [holdNote, setHoldNote] = useState('')
+    const [holdModalOpen, setHoldModalOpen] = useState(false)
+    const [heldListModalOpen, setHeldListModalOpen] = useState(false)
+    const [confirmResumeCart, setConfirmResumeCart] = useState(null)
 
     const allCustomers = useLiveQuery(() => db.customers.toArray(), [])
     const payment = parseAmount(paymentStr)
@@ -196,7 +205,17 @@ export default function POSRight() {
                         <Icon name="shopping_cart" size={18} />
                         Keranjang <span className="text2" style={{ fontSize: '0.85rem', fontWeight: 'normal' }}>({items.length} item)</span>
                     </h3>
-
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                        {heldCarts.length > 0 && (
+                            <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', position: 'relative' }} onClick={() => setHeldListModalOpen(true)} title="Transaksi Tertahan">
+                                <Icon name="pause_circle" size={18} style={{ color: 'var(--warning)' }} />
+                                <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--danger)', color: '#fff', fontSize: '0.65rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{heldCarts.length}</div>
+                            </button>
+                        )}
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} disabled={items.length === 0} onClick={() => {setHoldNote(''); setHoldModalOpen(true);}} title="Tahan Transaksi">
+                            <Icon name="pan_tool" size={18} />
+                        </button>
+                    </div>
                 </div>
                 <div className="cart-section scroll" style={{ paddingTop: '8px' }}>
                     {items.length === 0 && (
@@ -510,6 +529,99 @@ export default function POSRight() {
                             }}
                         >
                             <Icon name="delete" size={18} /> Ya, Kosongkan
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={holdModalOpen} onClose={() => setHoldModalOpen(false)} title="Tahan Transaksi" width="360px">
+                <div className="flex-col gap4">
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text2)' }}>
+                        Transaksi akan disimpan sementara sehingga Anda dapat melayani pelanggan lain.
+                    </p>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label>Catatan (Opsional)</label>
+                        <input
+                            className="input"
+                            autoFocus
+                            placeholder="Contoh: Nama Pelanggan"
+                            value={holdNote}
+                            onChange={e => setHoldNote(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex gap3 mt2">
+                        <button className="btn btn-ghost" onClick={() => setHoldModalOpen(false)}>Batal</button>
+                        <button
+                            className="btn btn-warning btn-block"
+                            onClick={() => {
+                                holdCart(holdNote)
+                                setPaymentStr('0')
+                                setHoldModalOpen(false)
+                                showToast('Transaksi berhasil ditahan', 'success')
+                            }}
+                        >
+                            <Icon name="pan_tool" size={18} /> Tahan Transaksi
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal open={heldListModalOpen} onClose={() => setHeldListModalOpen(false)} title="Transaksi Tertahan" width="400px">
+                <div className="flex-col gap3" style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' }}>
+                    {heldCarts.length === 0 && (
+                        <div className="empty-state" style={{ padding: '24px 0' }}>
+                            <p>Tidak ada transaksi tertahan</p>
+                        </div>
+                    )}
+                    {heldCarts.map(cart => (
+                        <div key={cart.id} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r2)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)' }}>{cart.note}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>{fmtDateTime(cart.timestamp)} • {cart.rawItems.length} item</div>
+                                </div>
+                                <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                                    {fmtCurrency(cart.rawItems.reduce((s, i) => s + i.price * i.qty, 0))}
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                <button className="btn btn-ghost btn-sm" style={{ flex: 1, color: 'var(--danger)' }} onClick={() => removeHeldCart(cart.id)}>
+                                    <Icon name="delete" size={16} /> Hapus
+                                </button>
+                                <button className="btn btn-primary btn-sm" style={{ flex: 2 }} onClick={() => {
+                                    if (items.length > 0) {
+                                        setConfirmResumeCart(cart.id)
+                                    } else {
+                                        resumeCart(cart.id)
+                                        setHeldListModalOpen(false)
+                                    }
+                                }}>
+                                    <Icon name="play_arrow" size={16} /> Lanjutkan
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </Modal>
+
+            <Modal open={!!confirmResumeCart} onClose={() => setConfirmResumeCart(null)} title="Peringatan" width="360px">
+                <div className="flex-col gap4 text-center">
+                    <Icon name="warning" size={48} style={{ color: 'var(--warning)', margin: '0 auto' }} />
+                    <p style={{ margin: '8px 0', fontSize: '0.95rem' }}>
+                        Keranjang saat ini tidak kosong. Melanjutkan transaksi tertahan akan <b>menggantikan</b> keranjang saat ini.
+                    </p>
+                    <div className="flex gap3 mt2">
+                        <button className="btn btn-ghost" onClick={() => setConfirmResumeCart(null)}>Batal</button>
+                        <button
+                            className="btn btn-warning btn-block"
+                            onClick={() => {
+                                resumeCart(confirmResumeCart)
+                                setConfirmResumeCart(null)
+                                setHeldListModalOpen(false)
+                                setPaymentStr('0')
+                            }}
+                        >
+                            Tetap Lanjutkan
                         </button>
                     </div>
                 </div>
