@@ -11,6 +11,7 @@ import './Settings.css'
 
 export default function Settings() {
     const [storeName, setStoreName] = useState('')
+    const [receiptFooter, setReceiptFooter] = useState('Terima kasih!')
     const [telegramToken, setTelegramToken] = useState('')
     const [telegramChatId, setTelegramChatId] = useState('')
     const [printerName, setPrinterName] = useState(getPrinterName())
@@ -34,6 +35,7 @@ export default function Settings() {
 
     useEffect(() => {
         db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
+        db.settings.get('receiptFooter').then(s => { if (s) setReceiptFooter(s.value) })
         db.settings.get('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
         db.settings.get('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
         db.settings.get('unknownBarcodeAction').then(s => { if (s?.value) setUnknownBarcodeAction(s.value) })
@@ -48,6 +50,11 @@ export default function Settings() {
     async function saveStoreName() {
         await db.settings.put({ key: 'storeName', value: storeName.trim() || 'My Store' })
         showToast('Nama toko disimpan', 'success')
+    }
+
+    async function saveReceiptFooter() {
+        await db.settings.put({ key: 'receiptFooter', value: receiptFooter.trim() || 'Terima kasih!' })
+        showToast('Footer struk disimpan', 'success')
     }
 
     function handleQrisImageChange(e) {
@@ -191,6 +198,18 @@ export default function Settings() {
                                 value={storeName} onChange={e => setStoreName(e.target.value)}
                                 onKeyDown={e => e.key === 'Enter' && saveStoreName()} />
                             <button className="btn btn-primary" onClick={saveStoreName}>
+                                <Icon name="save" size={18} /> Simpan
+                            </button>
+                        </div>
+                    </section>
+
+                    <section className="settings-card">
+                        <h2><Icon name="notes" size={20} style={{ marginRight: 6 }} />Footer Struk</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di bagian bawah struk.</p>
+                        <div className="flex gap3">
+                            <textarea id="receipt-footer-input" className="input" placeholder="Terima kasih!" rows={3} style={{ minHeight: '80px', height: 'auto', resize: 'vertical', fontFamily: 'inherit' }}
+                                value={receiptFooter} onChange={e => setReceiptFooter(e.target.value)} />
+                            <button className="btn btn-primary" style={{ alignSelf: 'flex-end' }} onClick={saveReceiptFooter}>
                                 <Icon name="save" size={18} /> Simpan
                             </button>
                         </div>

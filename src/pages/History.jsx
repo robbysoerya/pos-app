@@ -50,7 +50,8 @@ export default function History() {
     async function handleReprint(txn) {
         try {
             const storeName = (await db.settings.get('storeName'))?.value || 'My Store'
-            await printReceipt(txn, storeName)
+            const receiptFooter = (await db.settings.get('receiptFooter'))?.value || 'Terima kasih!'
+            await printReceipt(txn, storeName, receiptFooter)
             showToast('Berhasil print!', 'success')
         } catch (e) {
             showToast(e.message, 'error')

@@ -104,7 +104,7 @@ async function sendData(bytes) {
 }
 
 /** Format a receipt and print it */
-export async function printReceipt(transaction, storeName = 'My Store', retry = true) {
+export async function printReceipt(transaction, storeName = 'My Store', receiptFooter = 'Terima kasih!', retry = true) {
     try {
         if (!isPrinterConnected()) {
             let reconnected = await autoConnectPrinter()
@@ -118,7 +118,7 @@ export async function printReceipt(transaction, storeName = 'My Store', retry = 
             }
         }
 
-        const lines = buildReceipt(transaction, storeName)
+        const lines = buildReceipt(transaction, storeName, receiptFooter)
         await sendData(lines)
     } catch (err) {
         if (retry) {
@@ -128,7 +128,7 @@ export async function printReceipt(transaction, storeName = 'My Store', retry = 
                     const server = await _device.gatt.connect()
                     const service = await server.getPrimaryService(PRINTER_SERVICE_UUID)
                     _char = await service.getCharacteristic(PRINTER_CHAR_UUID)
-                    await printReceipt(transaction, storeName, false)
+                    await printReceipt(transaction, storeName, receiptFooter, false)
                     return
                 }
             } catch { }
@@ -137,7 +137,7 @@ export async function printReceipt(transaction, storeName = 'My Store', retry = 
     }
 }
 
-function buildReceipt(txn, storeName) {
+function buildReceipt(txn, storeName, receiptFooter = 'Terima kasih!') {
     const bytes = []
     const push = (...cmds) => cmds.forEach(c => bytes.push(...(Array.isArray(c) ? c : [c])))
     const text = (str) => [...new TextEncoder().encode(str + '\n')]
@@ -185,7 +185,7 @@ function buildReceipt(txn, storeName) {
     push(...text(pad('Kembali', fmtCurrency(txn.change))))
     push(...text('================================'))
     push(...ALIGN_CENTER)
-    push(...text('Terima kasih!'))
+    push(...text(receiptFooter))
     push(...text(''))
     push(...text(''))
     push(...CUT)
