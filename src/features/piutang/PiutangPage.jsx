@@ -1,11 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import Icon from '../components/Icon.jsx'
-import Modal from '../components/Modal.jsx'
-import { showToast } from '../components/Toast.jsx'
-import db from '../db/db.js'
-import { fmtCurrency, fmtDate, fmtDateTime, fmtTxnId } from '../utils/format.js'
-import './Piutang.css'
+import Icon from '../../components/Icon.jsx'
+import Modal from '../../components/Modal.jsx'
+import { showToast } from '../../components/Toast.jsx'
+import {
+    getCustomersQuery,
+    addCustomer,
+    getCustomerDebtsQuery,
+    getTransactionById,
+    getDebtPayments,
+    recordDebtPayment,
+    recordBulkDebtPayments
+} from '../../services/customerService.js'
+import { getTransactionItems } from '../../services/transactionService.js'
+import { fmtCurrency, fmtDate, fmtDateTime, fmtTxnId } from '../../utils/format.js'
+import './PiutangPage.css'
 
 /* ─── helpers ────────────────────────────────────────── */
 function ageColor(createdAt) {
@@ -34,10 +43,7 @@ function ageDaysLabel(createdAt) {
     return `${days} hari lalu`
 }
 
-/* ═══════════════════════════════════════════════════════
-   MAIN PAGE
-══════════════════════════════════════════════════════ */
-export default function Piutang() {
+export default function PiutangPage() {
     const [search, setSearch] = useState('')
     const [selectedCustomer, setSelectedCustomer] = useState(null)
     const [addCustomerModal, setAddCustomerModal] = useState(false)
@@ -53,11 +59,12 @@ export default function Piutang() {
     const [txnDetail, setTxnDetail] = useState(null)  // { txn, items }
 
     // All customers (plain list)
-    const customers = useLiveQuery(() => db.customers.toArray(), [])
+    const customers = useLiveQuery(getCustomersQuery, [])
 
     // Summary of outstanding debts per customer
     const debtSummary = useLiveQuery(async () => {
-        const allDebts = await db.debts.toArray()
+        const dbMod = await import('../../db/db.js')
+        const allDebts = await dbMod.default.debts.toArray()
         const map = {}
         for (const d of allDebts) {
             if (d.status === 'lunas') continue
@@ -73,14 +80,12 @@ export default function Piutang() {
     // Debts for selected customer
     const customerDebts = useLiveQuery(async () => {
         if (!selectedCustomer) return []
-        const debts = await db.debts
-            .where('customerId').equals(selectedCustomer.id)
-            .toArray()
+        const debts = await getCustomerDebtsQuery(selectedCustomer.id)
         // Sort newest first
         debts.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         // Attach payment history
         return Promise.all(debts.map(async d => {
-            const payments = await db.debt_payments.where('debtId').equals(d.id).toArray()
+            const payments = await getDebtPayments(d.id)
             return { ...d, payments }
         }))
     }, [selectedCustomer?.id])
@@ -105,14 +110,7 @@ export default function Piutang() {
         const cleanName = customerForm.name.trim()
         if (!cleanName) return showToast('Nama wajib diisi', 'error')
         try {
-            // Check uniqueness
-            const existing = await db.customers.where('name').equalsIgnoreCase(cleanName).count()
-            if (existing > 0) return showToast('Nama pelanggan sudah digunakan', 'error')
-
-            const id = await db.customers.add({
-                name: cleanName,
-                phone: customerForm.phone.trim(),
-            })
+            const id = await addCustomer(cleanName, customerForm.phone)
             showToast('Pelanggan ditambahkan', 'success')
             setAddCustomerModal(false)
             setCustomerForm({ name: '', phone: '' })
@@ -133,13 +131,7 @@ export default function Piutang() {
         if (amount > remaining) return showToast(`Melebihi sisa hutang (${fmtCurrency(remaining)})`, 'error')
         setPaying(true)
         try {
-            const now = new Date().toISOString()
-            await db.transaction('rw', [db.debts, db.debt_payments], async () => {
-                await db.debt_payments.add({ debtId: debt.id, amount, note: payNote.trim(), createdAt: now })
-                const newPaid = debt.paidAmount + amount
-                const newStatus = newPaid >= debt.amount ? 'lunas' : 'partial'
-                await db.debts.update(debt.id, { paidAmount: newPaid, status: newStatus })
-            })
+            await recordDebtPayment({ debt, payAmountNum: amount, note: payNote })
             showToast(amount >= remaining ? 'Hutang lunas! 🎉' : 'Pembayaran dicatat', 'success')
             setPayModal(null)
             setPayAmount('')
@@ -165,39 +157,7 @@ export default function Piutang() {
 
         setPayingTotal(true)
         try {
-            const now = new Date().toISOString()
-            // Unpaid debts are already sorted newest first by customerDebts liveQuery
-            // We need to reverse it to pay OLDEST debts first
-            const oldestFirstUnpaid = [...unpaid].reverse()
-
-            await db.transaction('rw', [db.debts, db.debt_payments], async () => {
-                let remainingPayment = amount
-
-                for (const debt of oldestFirstUnpaid) {
-                    if (remainingPayment <= 0) break
-
-                    const debtOwed = debt.amount - debt.paidAmount
-                    if (debtOwed <= 0) continue
-
-                    const appliedAmount = Math.min(debtOwed, remainingPayment)
-
-                    await db.debt_payments.add({
-                        debtId: debt.id,
-                        amount: appliedAmount,
-                        note: payTotalNote.trim() || 'Bayar Piutang',
-                        createdAt: now,
-                    })
-
-                    const newPaid = debt.paidAmount + appliedAmount
-                    const newStatus = newPaid >= debt.amount ? 'lunas' : 'partial'
-                    await db.debts.update(debt.id, {
-                        paidAmount: newPaid,
-                        status: newStatus,
-                    })
-
-                    remainingPayment -= appliedAmount
-                }
-            })
+            await recordBulkDebtPayments({ unpaidDebts: unpaid, amount, note: payTotalNote })
             showToast(amount >= totalOutstanding ? 'Semua hutang lunas! 🎉' : 'Pembayaran piutang dicatat', 'success')
             setPayTotalModal(false)
             setPayTotalAmount('')
@@ -212,13 +172,12 @@ export default function Piutang() {
     /* ── View transaction detail ───────────────────── */
     async function openTxnDetail(transactionId) {
         if (!transactionId) return
-        const txn = await db.transactions.get(transactionId)
+        const txn = await getTransactionById(transactionId)
         if (!txn) return showToast('Transaksi tidak ditemukan', 'error')
-        const items = await db.table('transaction_items').where('transactionId').equals(transactionId).toArray()
+        const items = await getTransactionItems(transactionId)
         setTxnDetail({ txn: { ...txn, items, customerName: selectedCustomer?.name }, items })
     }
 
-    /* ── Render ──────────────────────────────────────── */
     return (
         <div className="piutang-layout">
             {/* ── LEFT: customer list ── */}

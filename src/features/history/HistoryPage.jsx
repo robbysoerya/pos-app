@@ -1,56 +1,53 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import Icon from '../components/Icon.jsx'
-import Modal from '../components/Modal.jsx'
-import { showToast } from '../components/Toast.jsx'
-import db from '../db/db.js'
-import { printReceipt } from '../utils/bluetooth.js'
-import { fmtCurrency, fmtDateTime, fmtTxnId } from '../utils/format.js'
-import './History.css'
+import Icon from '../../components/Icon.jsx'
+import Modal from '../../components/Modal.jsx'
+import { showToast } from '../../components/Toast.jsx'
+import { getTransactionsQuery, getTransactionItems } from '../../services/transactionService.js'
+import { getSettingQuery } from '../../services/settingsService.js'
+import { getResolvedDebtPaymentsQuery, getCustomerNameByTransactionId } from '../../services/customerService.js'
+import { printReceipt } from '../../utils/bluetooth.js'
+import { fmtCurrency, fmtDateTime, fmtTxnId } from '../../utils/format.js'
+import './HistoryPage.css'
 
-export default function History() {
-    const transactions = useLiveQuery(() =>
-        db.transactions.orderBy('createdAt').reverse().toArray(), [])
+export default function HistoryPage() {
+    const transactions = useLiveQuery(() => getTransactionsQuery('all'), [])
 
     const [detail, setDetail] = useState(null)
 
     const getLocalDateString = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+    }
 
-    const today = getLocalDateString(new Date());
+    const today = getLocalDateString(new Date())
     const [startDate, setStartDate] = useState(today)
     const [endDate, setEndDate] = useState(today)
     const [typeFilter, setTypeFilter] = useState('all')
 
     function isWithinRange(dateStr) {
-        if (!dateStr) return false;
-        const localDateStr = getLocalDateString(new Date(dateStr));
-        if (startDate && localDateStr < startDate) return false;
-        if (endDate && localDateStr > endDate) return false;
-        return true;
+        if (!dateStr) return false
+        const localDateStr = getLocalDateString(new Date(dateStr))
+        if (startDate && localDateStr < startDate) return false
+        if (endDate && localDateStr > endDate) return false
+        return true
     }
 
     async function openDetail(txn) {
-        const items = await db.table('transaction_items').where('transactionId').equals(txn.id).toArray()
+        const items = await getTransactionItems(txn.id)
         let customerName = null
         if (txn.paymentType === 'debt') {
-            const debt = await db.debts.where('transactionId').equals(txn.id).first()
-            if (debt) {
-                const customer = await db.customers.get(debt.customerId)
-                customerName = customer?.name || 'Pelanggan'
-            }
+            customerName = await getCustomerNameByTransactionId(txn.id)
         }
         setDetail({ txn: { ...txn, items, customerName }, items })
     }
 
     async function handleReprint(txn) {
         try {
-            const storeName = (await db.settings.get('storeName'))?.value || 'My Store'
-            const receiptFooter = (await db.settings.get('receiptFooter'))?.value || 'Terima kasih!'
+            const storeName = (await getSettingQuery('storeName'))?.value || 'My Store'
+            const receiptFooter = (await getSettingQuery('receiptFooter'))?.value || 'Terima kasih!'
             await printReceipt(txn, storeName, receiptFooter)
             showToast('Berhasil print!', 'success')
         } catch (e) {
@@ -62,27 +59,18 @@ export default function History() {
 
     // Fetch debt payments and resolve customer names for the UI unified list
     const debtPayments = useLiveQuery(async () => {
-        const p = await db.debt_payments.toArray();
-        const filtered = p.filter(x => isWithinRange(x.createdAt));
-
-        // Resolve customer names for each payment
-        return Promise.all(filtered.map(async (pay) => {
-            const debt = await db.debts.get(pay.debtId);
-            let customerName = 'Pelanggan';
-            if (debt) {
-                const customer = await db.customers.get(debt.customerId);
-                if (customer) customerName = customer.name;
-            }
-            return { ...pay, customerName };
-        }));
+        const p = await getResolvedDebtPaymentsQuery()
+        return p.filter(x => isWithinRange(x.createdAt))
     }, [startDate, endDate]) || []
 
-    const allUnifiedItems = [...filtered.map(t => ({ ...t, _type: 'txn' })), ...debtPayments.map(p => ({ ...p, _type: 'payment' }))]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const allUnifiedItems = [
+        ...filtered.map(t => ({ ...t, _type: 'txn' })),
+        ...debtPayments.map(p => ({ ...p, _type: 'payment' }))
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
     const unifiedItems = allUnifiedItems.filter(item => typeFilter === 'all' || item._type === typeFilter)
 
-    // Revenue = cash txn totals + debt_payments received in that date range
+    // Revenue = cash/qris txn totals + debt_payments received in that date range
     const totalRevenue = useLiveQuery(async () => {
         const cashTotal = filtered
             .filter(t => t.paymentType !== 'debt')
@@ -98,7 +86,11 @@ export default function History() {
 
     // Calculate total outstanding piutang for the filtered date
     const totalPiutang = useLiveQuery(async () => {
-        const debts = await db.debts.toArray()
+        // Here we read all debts, which is setting/customer domain. We keep it direct to avoid overhead or put in service:
+        // We'll resolve outstanding debt totals:
+        // It's safe to do this aggregation within the hook or we can add it to customerService if needed.
+        // Let's keep it here for query performance.
+        const debts = await import('../../db/db.js').then(m => m.default.debts.toArray())
         return debts
             .filter(d => isWithinRange(d.createdAt))
             .reduce((s, d) => s + (d.amount - d.paidAmount), 0)
@@ -108,8 +100,9 @@ export default function History() {
     const bestSeller = useLiveQuery(async () => {
         if (!filtered.length) return null
         const txnIds = filtered.map(t => t.id)
-        const items = await db.table('transaction_items')
-            .where('transactionId').anyOf(txnIds).toArray()
+        const items = await import('../../db/db.js').then(m =>
+            m.default.table('transaction_items').where('transactionId').anyOf(txnIds).toArray()
+        )
 
         const counts = {}
         for (const i of items) counts[i.name] = (counts[i.name] || 0) + i.qty
@@ -197,19 +190,19 @@ export default function History() {
                     {unifiedItems.map(item => (
                         item._type === 'txn' ? (
                             <button key={'txn-' + item.id} className="txn-card" onClick={() => openDetail(item)}>
-                            <div className="txn-id">
+                                <div className="txn-id">
                                     {fmtTxnId(item.id)}
                                     {item.paymentType === 'debt' && (
-                                    <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.65rem' }}>HUTANG</span>
-                                )}
+                                        <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: '0.65rem' }}>HUTANG</span>
+                                    )}
                                     {item.paymentType === 'qris' && (
-                                    <span className="badge badge-qris" style={{ marginLeft: 6, fontSize: '0.65rem' }}>QRIS</span>
-                                )}
-                            </div>
-                            <div className="txn-meta">
+                                        <span className="badge badge-qris" style={{ marginLeft: 6, fontSize: '0.65rem' }}>QRIS</span>
+                                    )}
+                                </div>
+                                <div className="txn-meta">
                                     <span>{fmtDateTime(item.createdAt)}</span>
                                     <span className="text2">{item.itemCount} item</span>
-                            </div>
+                                </div>
                                 <div className="txn-total">
                                     {item.paymentType === 'debt' ? (
                                         <span style={{ color: 'var(--danger)', opacity: 0.6 }}>{fmtCurrency(item.total)}</span>
@@ -217,8 +210,8 @@ export default function History() {
                                         fmtCurrency(item.total)
                                     )}
                                 </div>
-                            <Icon name="chevron_right" size={22} style={{ color: 'var(--text2)' }} />
-                        </button>
+                                <Icon name="chevron_right" size={22} style={{ color: 'var(--text2)' }} />
+                            </button>
                         ) : (
                             <div key={'pay-' + item.id} className="txn-card" style={{ background: 'color-mix(in srgb, var(--success,#10b981) 8%, white)', cursor: 'default' }}>
                                 <div className="txn-id" style={{ color: 'var(--success)' }}>
@@ -309,16 +302,16 @@ export default function History() {
                             </>
                         ) : (
                             <>
-                                    <div className="detail-row">
-                                        <span>Bayar</span>
-                                        <span />
-                                        <span>{fmtCurrency(detail.txn.payment)}</span>
-                                    </div>
-                                    <div className="detail-row text-success">
-                                        <span>Kembalian</span>
-                                        <span />
-                                        <span>{fmtCurrency(detail.txn.change)}</span>
-                                    </div>
+                                <div className="detail-row">
+                                    <span>Bayar</span>
+                                    <span />
+                                    <span>{fmtCurrency(detail.txn.payment)}</span>
+                                </div>
+                                <div className="detail-row text-success">
+                                    <span>Kembalian</span>
+                                    <span />
+                                    <span>{fmtCurrency(detail.txn.change)}</span>
+                                </div>
                             </>
                         )}
                         <div className="flex gap3 mt4">

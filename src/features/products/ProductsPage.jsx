@@ -1,19 +1,25 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState, useRef, useCallback } from 'react'
-import * as XLSX from 'xlsx'
-import Icon from '../components/Icon.jsx'
-import Modal from '../components/Modal.jsx'
-import { showToast } from '../components/Toast.jsx'
-import db from '../db/db.js'
-import { fmtCapitalize, fmtCurrency } from '../utils/format.js'
-import './Products.css'
+import Icon from '../../components/Icon.jsx'
+import Modal from '../../components/Modal.jsx'
+import { showToast } from '../../components/Toast.jsx'
+import { getCategoriesQuery } from '../../services/categoryService.js'
+import {
+    getAllProductsQuery,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    updateProductStock,
+    importExcelProducts
+} from '../../services/productService.js'
+import { fmtCapitalize, fmtCurrency } from '../../utils/format.js'
+import './ProductsPage.css'
 
 const EMPTY_FORM = { name: '', categoryId: '', price: '', resellerPrice: '', stock: '', low_stock_threshold: '', barcode: '', trackStock: false }
 
-export default function Products() {
-    const categories = useLiveQuery(() => db.categories.toArray(), [])
-    const products = useLiveQuery(() =>
-        db.products.toArray().then(ps => ps.sort((a, b) => a.name.localeCompare(b.name))), [])
+export default function ProductsPage() {
+    const categories = useLiveQuery(getCategoriesQuery, [])
+    const products = useLiveQuery(getAllProductsQuery, [])
 
     const [modal, setModal] = useState(null)
     const [form, setForm] = useState(EMPTY_FORM)
@@ -75,11 +81,19 @@ export default function Products() {
         }
         setLoading(true)
         try {
-            if (modal.id) { await db.products.update(modal.id, payload); showToast('Produk diperbarui', 'success') }
-            else { await db.products.add(payload); showToast('Produk ditambahkan', 'success') }
+            if (modal.id) {
+                await updateProduct(modal.id, payload)
+                showToast('Produk diperbarui', 'success')
+            } else {
+                await addProduct(payload)
+                showToast('Produk ditambahkan', 'success')
+            }
             setModal(null)
-        } catch (e) { showToast('Error: ' + e.message, 'error') }
-        finally { setLoading(false) }
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error')
+        } finally {
+            setLoading(false)
+        }
     }
 
     function openDelete(p) { setPendingDelete(p) }
@@ -88,17 +102,17 @@ export default function Products() {
         const p = pendingDelete
         setPendingDelete(null)
         if (!p) return
-        await db.products.delete(p.id)
+        await deleteProduct(p.id)
         showToast('Produk dihapus', 'success')
     }
 
     async function adjustStock(p, delta) {
         const newStock = Math.max(0, (p.stock || 0) + delta)
-        await db.products.update(p.id, { stock: newStock })
-        await db.stock_movements.add({
-            productId: p.id, delta, reason: delta > 0 ? 'restock' : 'adjust',
-            createdAt: new Date().toISOString(),
-        })
+        try {
+            await updateProductStock(p.id, newStock, delta, delta > 0 ? 'restock' : 'adjust')
+        } catch (e) {
+            showToast('Gagal update stok: ' + e.message, 'error')
+        }
     }
 
     async function handleBulkUpload(e) {
@@ -106,94 +120,12 @@ export default function Products() {
         if (!file) return
         setBulkUploadLoading(true)
         try {
-            const data = await file.arrayBuffer()
-            const wb = XLSX.read(data, { type: 'array' })
-            let totalProducts = 0
-            let updatedProducts = 0
-
-            await db.transaction('rw', [db.categories, db.products], async () => {
-                for (let sheetIdx = 0; sheetIdx < wb.SheetNames.length; sheetIdx++) {
-                    const sheetName = wb.SheetNames[sheetIdx]
-                    const ws = wb.Sheets[sheetName]
-                    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 })
-
-                    if (jsonData.length === 0) continue
-
-                    const headers = jsonData[0].map(h => String(h).toLowerCase().trim())
-                    const namaIdx = headers.indexOf('nama')
-                    const hargaJualIdx = headers.indexOf('harga jual')
-                    const hargaGrosirIdx = headers.indexOf('harga grosir')
-                    const barcodeIdx = headers.indexOf('barcode')
-
-                    if (namaIdx === -1 || hargaJualIdx === -1) {
-                        throw new Error(`Sheet "${sheetName}": Columns "nama" and "harga jual" are required`)
-                    }
-
-                    let categoryName = sheetName.toLowerCase().trim()
-                    if (wb.SheetNames.length === 1 && file.name.toLowerCase().endsWith('.csv')) {
-                        const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
-                        categoryName = fileNameWithoutExt.toLowerCase().trim()
-                    }
-                    let categoryId = null
-
-                    if (categoryName) {
-                        let existingCat = await db.categories.where('name').equalsIgnoreCase(categoryName).first()
-                        if (!existingCat) {
-                            categoryId = await db.categories.add({ name: categoryName })
-                        } else {
-                            categoryId = existingCat.id
-                        }
-                    }
-
-                    for (let i = 1; i < jsonData.length; i++) {
-                        const row = jsonData[i]
-                        const nama = String(row[namaIdx] || '').trim()
-                        if (!nama) continue
-
-                        const hargaJual = Number(String(row[hargaJualIdx] || '').replace(/[^0-9]/g, ''))
-                        if (!hargaJual || isNaN(hargaJual)) continue
-
-                        const hargaGrosir = hargaGrosirIdx !== -1 ? Number(String(row[hargaGrosirIdx] || '').replace(/[^0-9]/g, '')) : hargaJual
-                        const barcode = barcodeIdx !== -1 ? String(row[barcodeIdx] || '').trim() : null
-
-                        const payload = {
-                            name: nama,
-                            categoryId,
-                            price: hargaJual,
-                            resellerPrice: hargaGrosir || hargaJual,
-                            stock: 0,
-                            low_stock_threshold: 0,
-                            barcode: barcode || null,
-                            trackStock: false,
-                        }
-
-                        // Update only when both barcode + name match.
-                        // This allows variants (e.g. pack/sachet) to share same barcode.
-                        if (barcode) {
-                            const existing = await db.products.where('barcode').equals(barcode).toArray()
-                            const sameName = existing.find(p => p.name.toLowerCase() === nama.toLowerCase())
-                            if (sameName) {
-                                await db.products.update(sameName.id, {
-                                    name: nama,
-                                    categoryId,
-                                    price: hargaJual,
-                                    resellerPrice: hargaGrosir || hargaJual,
-                                })
-                                updatedProducts++
-                                continue
-                            }
-                        }
-
-                        await db.products.add(payload)
-                        totalProducts++
-                    }
-                }
-            })
-
+            const arrayBuffer = await file.arrayBuffer()
+            const { totalProducts, updatedProducts } = await importExcelProducts(arrayBuffer, file.name)
             const parts = []
             if (totalProducts > 0) parts.push(`${totalProducts} produk baru`)
             if (updatedProducts > 0) parts.push(`${updatedProducts} produk diperbarui`)
-            showToast(`${parts.join(', ')} berhasil diimport!`, 'success')
+            showToast(`${parts.join(', ') || '0 produk'} berhasil diimport!`, 'success')
             setBulkUploadModal(false)
         } catch (e) {
             showToast('Error: ' + e.message, 'error')

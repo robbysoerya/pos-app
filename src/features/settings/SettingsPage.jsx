@@ -1,15 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
-import Icon from '../components/Icon.jsx'
-import Modal from '../components/Modal.jsx'
-import { showToast } from '../components/Toast.jsx'
-import db from '../db/db.js'
-import { exportBackup, importBackup, sendBackupToTelegram } from '../utils/backup.js'
-import { connectPrinter, disconnectPrinter, getPrinterName, isPrinterConnected } from '../utils/bluetooth.js'
-import { fmtDateTime } from '../utils/format.js'
-import './Settings.css'
+import Icon from '../../components/Icon.jsx'
+import Modal from '../../components/Modal.jsx'
+import { showToast } from '../../components/Toast.jsx'
+import { getSettingQuery, saveSetting, clearAllData } from '../../services/settingsService.js'
+import { exportBackup, importBackup, sendBackupToTelegram } from '../../utils/backup.js'
+import { connectPrinter, disconnectPrinter, getPrinterName, isPrinterConnected } from '../../utils/bluetooth.js'
+import { fmtDateTime } from '../../utils/format.js'
+import './SettingsPage.css'
 
-export default function Settings() {
+export default function SettingsPage() {
     const [storeName, setStoreName] = useState('')
     const [receiptFooter, setReceiptFooter] = useState('Terima kasih!')
     const [telegramToken, setTelegramToken] = useState('')
@@ -29,16 +29,21 @@ export default function Settings() {
     const qrisFileRef = useRef()
     const fileRef = useRef()
 
-    const backupRow = useLiveQuery(() => db.settings.get('lastBackupTime'), [])
-    const txnCount = useLiveQuery(() => db.transactions.count(), [])
+    // Read reactive backup data
+    const backupRow = useLiveQuery(() => getSettingQuery('lastBackupTime'), [])
+    const txnCount = useLiveQuery(async () => {
+        // Direct query to transactions count is fine here
+        const m = await import('../../db/db.js')
+        return m.default.transactions.count()
+    }, [])
     const needsBackup = txnCount > 0 && (!backupRow || (Date.now() - new Date(backupRow.value).getTime() > 7 * 24 * 60 * 60 * 1000))
 
     useEffect(() => {
-        db.settings.get('storeName').then(s => { if (s) setStoreName(s.value) })
-        db.settings.get('receiptFooter').then(s => { if (s) setReceiptFooter(s.value) })
-        db.settings.get('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
-        db.settings.get('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
-        db.settings.get('unknownBarcodeAction').then(s => { if (s?.value) setUnknownBarcodeAction(s.value) })
+        getSettingQuery('storeName').then(s => { if (s) setStoreName(s.value) })
+        getSettingQuery('receiptFooter').then(s => { if (s) setReceiptFooter(s.value) })
+        getSettingQuery('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
+        getSettingQuery('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
+        getSettingQuery('unknownBarcodeAction').then(s => { if (s?.value) setUnknownBarcodeAction(s.value) })
     }, [])
 
     useEffect(() => {
@@ -48,12 +53,12 @@ export default function Settings() {
     }, [])
 
     async function saveStoreName() {
-        await db.settings.put({ key: 'storeName', value: storeName.trim() || 'My Store' })
+        await saveSetting('storeName', storeName.trim() || 'My Store')
         showToast('Nama toko disimpan', 'success')
     }
 
     async function saveReceiptFooter() {
-        await db.settings.put({ key: 'receiptFooter', value: receiptFooter.trim() || 'Terima kasih!' })
+        await saveSetting('receiptFooter', receiptFooter.trim() || 'Terima kasih!')
         showToast('Footer struk disimpan', 'success')
     }
 
@@ -79,13 +84,13 @@ export default function Settings() {
     }
 
     async function saveTelegramConfig() {
-        await db.settings.put({ key: 'telegramToken', value: telegramToken.trim() })
-        await db.settings.put({ key: 'telegramChatId', value: telegramChatId.trim() })
+        await saveSetting('telegramToken', telegramToken.trim())
+        await saveSetting('telegramChatId', telegramChatId.trim())
         showToast('Pengaturan Telegram disimpan', 'success')
     }
 
     async function saveBarcodeConfig() {
-        await db.settings.put({ key: 'unknownBarcodeAction', value: unknownBarcodeAction })
+        await saveSetting('unknownBarcodeAction', unknownBarcodeAction)
         showToast('Pengaturan barcode disimpan', 'success')
     }
 
@@ -111,7 +116,7 @@ export default function Settings() {
             setSendingTelegram(true)
             try {
                 await sendBackupToTelegram(telegramToken, telegramChatId, storeName || 'My Store')
-                await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
+                await saveSetting('lastBackupTime', new Date().toISOString())
                 showToast('Backup berhasil dikirim ke Telegram', 'success')
             } catch (e) {
                 setExportErrorMsg(e.message)
@@ -129,7 +134,7 @@ export default function Settings() {
         try {
             const saved = await exportBackup(storeName || 'My Store')
             if (saved) {
-                await db.settings.put({ key: 'lastBackupTime', value: new Date().toISOString() })
+                await saveSetting('lastBackupTime', new Date().toISOString())
                 showToast('Backup berhasil diunduh', 'success')
             }
         } catch (e) { showToast('Gagal export: ' + e.message, 'error') }
@@ -138,9 +143,6 @@ export default function Settings() {
     function handleImport(e) {
         const file = e.target.files?.[0]
         if (!file) return
-        // Store the file and show a React modal for confirmation.
-        // Chrome blocks window.confirm() after a file-picker gesture, so
-        // we use a custom modal instead.
         setPendingImportFile(file)
         fileRef.current.value = ''
     }
@@ -170,16 +172,13 @@ export default function Settings() {
 
     async function confirmClearAll() {
         setShowClearModal(false)
-        await db.transaction('rw', [
-            db.categories, db.products, db.transactions, db.table('transaction_items'),
-            db.stock_movements, db.settings, db.customers, db.debts, db.debt_payments
-        ], async () => {
-            await db.categories.clear(); await db.products.clear()
-            await db.transactions.clear(); await db.table('transaction_items').clear()
-            await db.stock_movements.clear(); await db.settings.clear()
-            await db.customers.clear(); await db.debts.clear(); await db.debt_payments.clear()
-        })
-        showToast('Semua data dihapus', 'info'); setStoreName('')
+        try {
+            await clearAllData()
+            showToast('Semua data dihapus', 'info')
+            setStoreName('')
+        } catch (e) {
+            showToast('Gagal menghapus data: ' + e.message, 'error')
+        }
     }
 
     return (
@@ -302,13 +301,13 @@ export default function Settings() {
                             </div>
                         )}
                         <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>
-                            Export semua data ke file JSON. Import untuk restore.<br />
+                            Export semua data to file JSON. Import to restore.<br />
                             {backupRow && <strong style={{ color: 'var(--text)' }}>Terakhir backup: {fmtDateTime(backupRow.value)}</strong>}
                         </p>
                         <div className="flex gap3 flex-wrap">
-                            <button 
-                                id="export-btn" 
-                                className="btn btn-primary" 
+                            <button
+                                id="export-btn"
+                                className="btn btn-primary"
                                 onClick={handleExport}
                                 disabled={sendingTelegram}
                             >
@@ -354,6 +353,16 @@ export default function Settings() {
                             </button>
                         </div>
                     </section>
+
+                    {deferredPrompt && (
+                        <section className="settings-card">
+                            <h2><Icon name="install_desktop" size={20} style={{ marginRight: 6 }} />Instal Aplikasi</h2>
+                            <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Jalankan aplikasi POS ini sebagai aplikasi native offline di perangkat Anda.</p>
+                            <button className="btn btn-primary" onClick={handleInstall}>
+                                <Icon name="get_app" size={18} /> Instal POS App
+                            </button>
+                        </section>
+                    )}
 
                     <section className="settings-card danger-zone">
                         <h2><Icon name="warning" size={20} filled style={{ marginRight: 6, color: 'var(--danger)' }} />Zona Bahaya</h2>

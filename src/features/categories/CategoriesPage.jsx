@@ -1,14 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import Icon from '../components/Icon.jsx'
-import Modal from '../components/Modal.jsx'
-import { showToast } from '../components/Toast.jsx'
-import db from '../db/db.js'
-import { fmtCapitalize } from '../utils/format.js'
-import './Categories.css'
+import Icon from '../../components/Icon.jsx'
+import Modal from '../../components/Modal.jsx'
+import { showToast } from '../../components/Toast.jsx'
+import {
+    getCategoriesQuery,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    getProductCountByCategory
+} from '../../services/categoryService.js'
+import { fmtCapitalize } from '../../utils/format.js'
+import './CategoriesPage.css'
 
-export default function Categories() {
-    const categories = useLiveQuery(() => db.categories.orderBy('name').toArray(), [])
+export default function CategoriesPage() {
+    const categories = useLiveQuery(getCategoriesQuery, [])
     const [modal, setModal] = useState(null)
     const [name, setName] = useState('')
     const [loading, setLoading] = useState(false)
@@ -22,10 +28,10 @@ export default function Categories() {
         setLoading(true)
         try {
             if (modal.id) {
-                await db.categories.update(modal.id, { name: name.trim().toLowerCase() })
+                await updateCategory(modal.id, name)
                 showToast('Kategori diperbarui', 'success')
             } else {
-                await db.categories.add({ name: name.trim().toLowerCase() })
+                await addCategory(name)
                 showToast('Kategori ditambahkan', 'success')
             }
             setModal(null)
@@ -37,7 +43,7 @@ export default function Categories() {
     }
 
     async function handleDelete(cat) {
-        const count = await db.products.where('categoryId').equals(cat.id).count()
+        const count = await getProductCountByCategory(cat.id)
         if (count > 0) return showToast(`Tidak bisa hapus: ada ${count} produk dalam kategori ini`, 'error')
         setPendingDelete(cat)
     }
@@ -46,7 +52,7 @@ export default function Categories() {
         const cat = pendingDelete
         setPendingDelete(null)
         if (!cat) return
-        await db.categories.delete(cat.id)
+        await deleteCategory(cat.id)
         showToast('Kategori dihapus', 'success')
     }
 

@@ -1,13 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useState } from 'react'
-import Icon from './Icon.jsx'
-import Modal from './Modal.jsx'
+import Icon from '../../../components/Icon.jsx'
+import Modal from '../../../components/Modal.jsx'
 import NumPad from './NumPad.jsx'
-import { showToast } from './Toast.jsx'
+import { showToast } from '../../../components/Toast.jsx'
 import { useCartStore } from '../store/cartStore.js'
-import db from '../db/db.js'
-import { printReceipt } from '../utils/bluetooth.js'
-import { fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../utils/format.js'
+import { getCustomersQuery, addCustomer } from '../../../services/customerService.js'
+import { createCashCheckout, createQrisCheckout, createDebtCheckout } from '../../../services/transactionService.js'
+import { getSettingQuery } from '../../../services/settingsService.js'
+import { printReceipt } from '../../../utils/bluetooth.js'
+import { fmtCurrency, fmtDateTime, fmtTxnId, parseAmount } from '../../../utils/format.js'
 
 export default function POSRight() {
     const items = useCartStore(s => s.rawItems)
@@ -40,7 +42,7 @@ export default function POSRight() {
     const [heldListModalOpen, setHeldListModalOpen] = useState(false)
     const [confirmResumeCart, setConfirmResumeCart] = useState(null)
 
-    const allCustomers = useLiveQuery(() => db.customers.toArray(), [])
+    const allCustomers = useLiveQuery(getCustomersQuery, [])
     const payment = parseAmount(paymentStr)
     const change = payment - total
     const canCheckout = items.length > 0 && payment >= total
@@ -55,40 +57,11 @@ export default function POSRight() {
         if (!canCheckout || checkoutLoading) return
         setCheckoutLoading(true)
         try {
-            const now = new Date().toISOString()
-            const txnItems = items.map(i => ({
-                productId: i.productId, name: i.name, price: i.price, qty: i.qty,
-            }))
-
-            let txnId
-            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items')], async () => {
-                txnId = await db.transactions.add({
-                    createdAt: now, total, payment, change, itemCount: items.length,
-                })
-                for (const item of items) {
-                    if (typeof item.productId === 'string' && item.productId.startsWith('custom_')) {
-                        continue // Skip stock deduction for custom items
-                    }
-                    await db.products.where('id').equals(item.productId).modify(p => {
-                        p.stock = Math.max(0, p.stock - item.qty)
-                    })
-                    await db.stock_movements.add({
-                        productId: item.productId, delta: -item.qty,
-                        reason: 'sale', createdAt: now, transactionId: txnId,
-                    })
-                }
-                for (const item of txnItems) {
-                    await db.table('transaction_items').add({ transactionId: txnId, ...item })
-                }
-            })
-
-            const fullTxn = { id: txnId, createdAt: now, total, payment, change, items: txnItems }
+            const fullTxn = await createCashCheckout({ total, payment, change, items })
             clearCart()
             setPaymentStr('0')
             setConfirmBayarModal(false)
             setReceiptModal(fullTxn)
-
-
             showToast('Transaksi berhasil!', 'success')
         } catch (e) {
             showToast('Error: ' + e.message, 'error')
@@ -101,33 +74,7 @@ export default function POSRight() {
         if (!canQris || qrisLoading) return
         setQrisLoading(true)
         try {
-            const now = new Date().toISOString()
-            const txnItems = items.map(i => ({
-                productId: i.productId, name: i.name, price: i.price, qty: i.qty,
-            }))
-
-            let txnId
-            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items')], async () => {
-                txnId = await db.transactions.add({
-                    createdAt: now, total, payment: total, change: 0,
-                    itemCount: items.length, paymentType: 'qris',
-                })
-                for (const item of items) {
-                    if (typeof item.productId === 'string' && item.productId.startsWith('custom_')) continue
-                    await db.products.where('id').equals(item.productId).modify(p => {
-                        p.stock = Math.max(0, p.stock - item.qty)
-                    })
-                    await db.stock_movements.add({
-                        productId: item.productId, delta: -item.qty,
-                        reason: 'sale', createdAt: now, transactionId: txnId,
-                    })
-                }
-                for (const item of txnItems) {
-                    await db.table('transaction_items').add({ transactionId: txnId, ...item })
-                }
-            })
-
-            const fullTxn = { id: txnId, createdAt: now, total, payment: total, change: 0, items: txnItems, paymentType: 'qris' }
+            const fullTxn = await createQrisCheckout({ total, items })
             clearCart()
             setPaymentStr('0')
             setQrisModal(false)
@@ -144,42 +91,7 @@ export default function POSRight() {
         if (!canDebt || debtLoading) return
         setDebtLoading(true)
         try {
-            const now = new Date().toISOString()
-            const txnItems = items.map(i => ({ productId: i.productId, name: i.name, price: i.price, qty: i.qty }))
-
-            let txnId
-            await db.transaction('rw', [db.transactions, db.products, db.stock_movements, db.table('transaction_items'), db.debts, db.debt_payments], async () => {
-                txnId = await db.transactions.add({
-                    createdAt: now, total, payment, change: 0,
-                    itemCount: items.length, paymentType: 'debt',
-                })
-                for (const item of items) {
-                    if (typeof item.productId === 'string' && item.productId.startsWith('custom_')) continue
-                    await db.products.where('id').equals(item.productId).modify(p => {
-                        p.stock = Math.max(0, p.stock - item.qty)
-                    })
-                    await db.stock_movements.add({
-                        productId: item.productId, delta: -item.qty,
-                        reason: 'sale', createdAt: now, transactionId: txnId,
-                    })
-                }
-                for (const item of txnItems) {
-                    await db.table('transaction_items').add({ transactionId: txnId, ...item })
-                }
-                const newDebtId = await db.debts.add({
-                    customerId: customer.id, transactionId: txnId,
-                    amount: total, paidAmount: payment,
-                    status: payment > 0 ? 'partial' : 'pending', createdAt: now,
-                })
-                if (payment > 0) {
-                    await db.debt_payments.add({
-                        debtId: newDebtId, amount: payment,
-                        note: 'DP / Bayar Sebagian', createdAt: now
-                    })
-                }
-            })
-
-            const fullTxn = { id: txnId, createdAt: now, total, payment, change: 0, items: txnItems, paymentType: 'debt', customerName: customer.name }
+            const fullTxn = await createDebtCheckout({ total, payment, customer, items })
             clearCart()
             setPaymentStr('0')
             setDebtModal(false)
@@ -207,12 +119,12 @@ export default function POSRight() {
                     </h3>
                     <div style={{ display: 'flex', gap: '6px' }}>
                         {heldCarts.length > 0 && (
-                            <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', position: 'relative' }} onClick={() => setHeldListModalOpen(true)} title="Transaksi Tertahan">
+                            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', position: 'relative' }} onClick={() => setHeldListModalOpen(true)} title="Transaksi Tertahan">
                                 <Icon name="pause_circle" size={18} style={{ color: 'var(--warning)' }} />
                                 <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--danger)', color: '#fff', fontSize: '0.65rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{heldCarts.length}</div>
                             </button>
                         )}
-                        <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} disabled={items.length === 0} onClick={() => {setHoldNote(''); setHoldModalOpen(true);}} title="Tahan Transaksi">
+                        <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} disabled={items.length === 0} onClick={() => {setHoldNote(''); setHoldModalOpen(true);}} title="Tahan Transaksi">
                             <Icon name="pan_tool" size={18} />
                         </button>
                     </div>
@@ -231,10 +143,10 @@ export default function POSRight() {
                                 <div className="cart-item-price">{fmtCurrency(item.price)}</div>
                             </div>
                             <div className="cart-item-controls">
-                                <button className="qty-btn" onClick={(e) => { updateQty(item.cartItemId, item.qty - 1); e.currentTarget.blur(); }}>−</button>
+                                <button type="button" onMouseDown={(e) => e.preventDefault()} className="qty-btn" onClick={() => updateQty(item.cartItemId, item.qty - 1)}>−</button>
                                 <span className="qty-value">{item.qty}</span>
-                                <button className="qty-btn" onClick={(e) => { updateQty(item.cartItemId, item.qty + 1); e.currentTarget.blur(); }}>+</button>
-                                <button className="remove-btn" onClick={(e) => { removeItem(item.cartItemId); e.currentTarget.blur(); }}>
+                                <button type="button" onMouseDown={(e) => e.preventDefault()} className="qty-btn" onClick={() => updateQty(item.cartItemId, item.qty + 1)}>+</button>
+                                <button type="button" onMouseDown={(e) => e.preventDefault()} className="remove-btn" onClick={() => removeItem(item.cartItemId)}>
                                     <Icon name="delete" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
                                 </button>
                             </div>
@@ -271,6 +183,7 @@ export default function POSRight() {
 
                     <div className="checkout-actions">
                         <button
+                            type="button"
                             className="btn btn-warning"
                             style={{ flexShrink: 0 }}
                             disabled={!canDebt || debtLoading}
@@ -280,6 +193,7 @@ export default function POSRight() {
                             <Icon name="credit_score" size={20} /> Hutang
                         </button>
                         <button
+                            type="button"
                             id="qris-btn"
                             className="btn btn-qris"
                             style={{ flexShrink: 0 }}
@@ -290,6 +204,7 @@ export default function POSRight() {
                             <Icon name="qr_code_2" size={20} /> QRIS
                         </button>
                         <button
+                            type="button"
                             id="checkout-btn"
                             className="btn btn-success btn-lg"
                             style={{ flex: 1 }}
@@ -341,8 +256,9 @@ export default function POSRight() {
                         Minta pelanggan scan QR di atas, lalu konfirmasi setelah pembayaran diterima.
                     </p>
                     <div className="flex gap3" style={{ width: '100%' }}>
-                        <button className="btn btn-ghost" onClick={() => setQrisModal(false)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setQrisModal(false)}>Batal</button>
                         <button
+                            type="button"
                             id="qris-confirm-btn"
                             className="btn btn-success btn-block"
                             disabled={!canQris || qrisLoading}
@@ -378,6 +294,7 @@ export default function POSRight() {
                         {filteredCustomers.map(c => (
                             <button
                                 key={c.id}
+                                type="button"
                                 className="btn btn-ghost"
                                 style={{ justifyContent: 'flex-start', gap: '10px', padding: '10px 12px', textAlign: 'left' }}
                                 disabled={debtLoading}
@@ -395,7 +312,7 @@ export default function POSRight() {
                     </div>
 
                     {!showNewCustomer ? (
-                        <button className="btn btn-primary" onClick={() => setShowNewCustomer(true)}>
+                        <button type="button" className="btn btn-primary" onClick={() => setShowNewCustomer(true)}>
                             <Icon name="person_add" size={18} /> Pelanggan Baru
                         </button>
                     ) : (
@@ -422,19 +339,16 @@ export default function POSRight() {
                                 />
                             </div>
                             <div className="flex gap3">
-                                <button className="btn btn-ghost" onClick={() => setShowNewCustomer(false)}>Batal</button>
+                                <button type="button" className="btn btn-ghost" onClick={() => setShowNewCustomer(false)}>Batal</button>
                                 <button
+                                    type="button"
                                     className="btn btn-success btn-block"
                                     disabled={!newCustomerForm.name.trim() || debtLoading}
                                     onClick={async () => {
                                         const cleanName = newCustomerForm.name.trim()
                                         if (!cleanName || debtLoading) return
                                         try {
-                                            // Check uniqueness (case-insensitive)
-                                            const existing = await db.customers.where('name').equalsIgnoreCase(cleanName).count()
-                                            if (existing > 0) return showToast('Nama pelanggan sudah digunakan', 'error')
-
-                                            const id = await db.customers.add({ name: cleanName, phone: newCustomerForm.phone.trim() })
+                                            const id = await addCustomer(cleanName, newCustomerForm.phone.trim())
                                             setConfirmDebtCustomer({ id, name: cleanName, phone: newCustomerForm.phone.trim() })
                                         } catch (e) { showToast('Error: ' + e.message, 'error') }
                                     }}
@@ -448,39 +362,42 @@ export default function POSRight() {
             </Modal>
 
             <Modal open={!!confirmDebtCustomer} onClose={() => setConfirmDebtCustomer(null)} title="Konfirmasi Hutang" width="400px">
-                <div className="flex-col gap4">
-                    <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                        <div style={{ fontSize: '0.9rem', color: 'var(--text2)', marginBottom: '4px' }}>Catat Hutang Untuk</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--danger)' }}>{confirmDebtCustomer?.name}</div>
-                    </div>
-                    <div style={{ background: 'var(--surface2)', padding: '12px', borderRadius: 'var(--r2)', border: '1px solid var(--border)' }}>
-                        <div className="flex justify-between mb2">
-                            <span className="text2">Total Belanja</span>
-                            <span className="font-bold">{fmtCurrency(total)}</span>
+                {confirmDebtCustomer && (
+                    <div className="flex-col gap4">
+                        <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text2)', marginBottom: '4px' }}>Catat Hutang Untuk</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--danger)' }}>{confirmDebtCustomer.name}</div>
                         </div>
-                        {payment > 0 && (
+                        <div style={{ background: 'var(--surface2)', padding: '12px', borderRadius: 'var(--r2)', border: '1px solid var(--border)' }}>
                             <div className="flex justify-between mb2">
-                                <span className="text2">Dibayar Awal (DP)</span>
-                                <span className="font-bold">{fmtCurrency(payment)}</span>
+                                <span className="text2">Total Belanja</span>
+                                <span className="font-bold">{fmtCurrency(total)}</span>
                             </div>
-                        )}
-                        <div className="divider" />
-                        <div className="flex justify-between">
-                            <span style={{ fontWeight: 600 }}>Total Hutang</span>
-                            <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtCurrency(total - payment)}</span>
+                            {payment > 0 && (
+                                <div className="flex justify-between mb2">
+                                    <span className="text2">Dibayar Awal (DP)</span>
+                                    <span className="font-bold">{fmtCurrency(payment)}</span>
+                                </div>
+                            )}
+                            <div className="divider" />
+                            <div className="flex justify-between">
+                                <span style={{ fontWeight: 600 }}>Total Hutang</span>
+                                <span style={{ fontWeight: 700, color: 'var(--danger)' }}>{fmtCurrency(total - payment)}</span>
+                            </div>
+                        </div>
+                        <div className="flex gap3 mt2">
+                            <button type="button" className="btn btn-ghost" onClick={() => setConfirmDebtCustomer(null)}>Batal</button>
+                            <button
+                                type="button"
+                                className="btn btn-warning btn-block"
+                                disabled={debtLoading}
+                                onClick={() => handleDebtCheckout(confirmDebtCustomer)}
+                            >
+                                {debtLoading ? 'Proses...' : <><Icon name="check" size={18} /> Ya, Catat Hutang</>}
+                            </button>
                         </div>
                     </div>
-                    <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setConfirmDebtCustomer(null)}>Batal</button>
-                        <button
-                            className="btn btn-warning btn-block"
-                            disabled={debtLoading}
-                            onClick={() => handleDebtCheckout(confirmDebtCustomer)}
-                        >
-                            {debtLoading ? 'Proses...' : <><Icon name="check" size={18} /> Ya, Catat Hutang</>}
-                        </button>
-                    </div>
-                </div>
+                )}
             </Modal>
             <Modal open={confirmBayarModal} onClose={() => setConfirmBayarModal(false)} title="Konfirmasi Pembayaran" width="400px">
                 <div className="flex-col gap4">
@@ -500,8 +417,9 @@ export default function POSRight() {
                         </div>
                     </div>
                     <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setConfirmBayarModal(false)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setConfirmBayarModal(false)}>Batal</button>
                         <button
+                            type="button"
                             className="btn btn-success btn-block"
                             disabled={checkoutLoading}
                             onClick={handleCheckout}
@@ -519,8 +437,9 @@ export default function POSRight() {
                         Apakah Anda yakin ingin mengosongkan keranjang?
                     </p>
                     <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setConfirmResetModal(false)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setConfirmResetModal(false)}>Batal</button>
                         <button
+                            type="button"
                             className="btn btn-danger btn-block"
                             onClick={() => {
                                 clearCart()
@@ -550,8 +469,9 @@ export default function POSRight() {
                         />
                     </div>
                     <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setHoldModalOpen(false)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setHoldModalOpen(false)}>Batal</button>
                         <button
+                            type="button"
                             className="btn btn-warning btn-block"
                             onClick={() => {
                                 holdCart(holdNote)
@@ -585,10 +505,10 @@ export default function POSRight() {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                <button className="btn btn-ghost btn-sm" style={{ flex: 1, color: 'var(--danger)' }} onClick={() => removeHeldCart(cart.id)}>
+                                <button type="button" className="btn btn-ghost btn-sm" style={{ flex: 1, color: 'var(--danger)' }} onClick={() => removeHeldCart(cart.id)}>
                                     <Icon name="delete" size={16} /> Hapus
                                 </button>
-                                <button className="btn btn-primary btn-sm" style={{ flex: 2 }} onClick={() => {
+                                <button type="button" className="btn btn-primary btn-sm" style={{ flex: 2 }} onClick={() => {
                                     if (items.length > 0) {
                                         setConfirmResumeCart(cart.id)
                                     } else {
@@ -611,8 +531,9 @@ export default function POSRight() {
                         Keranjang saat ini tidak kosong. Melanjutkan transaksi tertahan akan <b>menggantikan</b> keranjang saat ini.
                     </p>
                     <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setConfirmResumeCart(null)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setConfirmResumeCart(null)}>Batal</button>
                         <button
+                            type="button"
                             className="btn btn-warning btn-block"
                             onClick={() => {
                                 resumeCart(confirmResumeCart)
@@ -633,8 +554,10 @@ export default function POSRight() {
 function ReceiptPreview({ txn, onClose }) {
     const handleReprint = async () => {
         try {
-            const storeName = (await db.settings.get('storeName'))?.value || 'My Store'
-            const receiptFooter = (await db.settings.get('receiptFooter'))?.value || 'Terima kasih!'
+            const storeNameRow = await getSettingQuery('storeName')
+            const receiptFooterRow = await getSettingQuery('receiptFooter')
+            const storeName = storeNameRow?.value || 'My Store'
+            const receiptFooter = receiptFooterRow?.value || 'Terima kasih!'
             await printReceipt(txn, storeName, receiptFooter)
             showToast('Berhasil print!', 'success')
         } catch (e) {
@@ -695,10 +618,10 @@ function ReceiptPreview({ txn, onClose }) {
                 </>
             )}
             <div className="flex gap3 mt4">
-                <button className="btn btn-ghost" onClick={handleReprint}>
+                <button type="button" className="btn btn-ghost" onClick={handleReprint}>
                     <Icon name="print" size={18} /> Cetak
                 </button>
-                <button className="btn btn-primary btn-block" onClick={onClose}>
+                <button type="button" className="btn btn-primary btn-block" onClick={onClose}>
                     <Icon name="check" size={18} /> Selesai
                 </button>
             </div>

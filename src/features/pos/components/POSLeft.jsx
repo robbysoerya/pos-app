@@ -1,11 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Icon from './Icon.jsx'
-import Modal from './Modal.jsx'
-import { showToast } from './Toast.jsx'
+import Icon from '../../../components/Icon.jsx'
+import Modal from '../../../components/Modal.jsx'
+import { showToast } from '../../../components/Toast.jsx'
 import { useCartStore } from '../store/cartStore.js'
-import db from '../db/db.js'
-import { fmtCapitalize, fmtCurrency } from '../utils/format.js'
+import { getCategoriesQuery } from '../../../services/categoryService.js'
+import { getFilteredProductsQuery, getProductsByBarcode, addProduct, getProductById } from '../../../services/productService.js'
+import { getSettingQuery } from '../../../services/settingsService.js'
+import { fmtCapitalize, fmtCurrency } from '../../../utils/format.js'
 
 export default function POSLeft() {
     const addItem = useCartStore(s => s.addItem)
@@ -62,20 +64,11 @@ export default function POSLeft() {
         return () => window.removeEventListener('keydown', handleGlobalKeyDown)
     }, [])
 
-    const categories = useLiveQuery(() => db.categories.toArray(), [])
-    const unknownBarcodeActionRow = useLiveQuery(() => db.settings.get('unknownBarcodeAction'), [])
+    const categories = useLiveQuery(getCategoriesQuery, [])
+    const unknownBarcodeActionRow = useLiveQuery(() => getSettingQuery('unknownBarcodeAction'), [])
     const unknownBarcodeAction = unknownBarcodeActionRow?.value || 'prompt_create'
     const products = useLiveQuery(
-        async () => {
-            let q = db.products
-            if (activeCat !== null) q = q.where('categoryId').equals(activeCat)
-            let arr = await q.toArray()
-            if (searchInput.trim()) {
-                const s = searchInput.toLowerCase()
-                arr = arr.filter(p => p.name.toLowerCase().includes(s) || (p.barcode && p.barcode.includes(s)))
-            }
-            return arr
-        },
+        () => getFilteredProductsQuery(activeCat, searchInput),
         [activeCat, searchInput]
     )
 
@@ -88,7 +81,7 @@ export default function POSLeft() {
             return
         }
         lastScanRef.current = { code, at: now }
-        const matches = await db.products.where('barcode').equals(code).toArray()
+        const matches = await getProductsByBarcode(code)
         if (matches.length === 0) {
             if (unknownBarcodeAction === 'reject') {
                 showToast(`Barcode tidak terdaftar: ${code}`, 'error')
@@ -126,8 +119,8 @@ export default function POSLeft() {
                 barcode: newProductModal.barcode
             }
 
-            const newId = await db.products.add(payload)
-            const created = await db.products.get(newId)
+            const newId = await addProduct(payload)
+            const created = await getProductById(newId)
 
             addItem(created)
             showToast(`${created.name} berhasil ditambahkan ke database & keranjang`, 'success')
@@ -174,24 +167,28 @@ export default function POSLeft() {
                             onChange={e => { setSearchInput(e.target.value); setLimit(50); }}
                         />
                         {searchInput && (
-                            <button className="btn btn-ghost" style={{ border: 'none', padding: '4px' }} onClick={() => setSearchInput('')}>
+                            <button type="button" className="btn btn-ghost" style={{ border: 'none', padding: '4px' }} onClick={() => setSearchInput('')}>
                                 <Icon name="close" size={18} />
                             </button>
                         )}
                     </div>
-                    <button className="btn btn-primary btn-sm" style={{ flexShrink: 0, padding: '0 12px', height: '36px' }} onClick={() => setCustomModal(true)}>
+                    <button type="button" className="btn btn-primary btn-sm" style={{ flexShrink: 0, padding: '0 12px', height: '36px' }} onClick={() => setCustomModal(true)}>
                         <Icon name="post_add" size={18} /> Produk Manual
                     </button>
                 </div>
 
                 <div className="cat-bar scroll-x">
                     <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
                         className={'cat-btn' + (activeCat === null ? ' active' : '')}
                         onClick={() => { setActiveCat(null); setLimit(50); }}
                     >Semua</button>
                     {categories?.map(c => (
                         <button
                             key={c.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
                             className={'cat-btn' + (activeCat === c.id ? ' active' : '')}
                             onClick={() => { setActiveCat(c.id); setLimit(50); }}
                         >{fmtCapitalize(c.name)}</button>
@@ -230,11 +227,12 @@ export default function POSLeft() {
                             <button
                                 key={p.id}
                                 ref={isLast ? lastElementRef : null}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
                                 className={'product-card' + (isOutOfStock ? ' out-of-stock' : '')}
-                                onClick={(e) => {
+                                onClick={() => {
                                     if (isOutOfStock) return showToast('Stok habis!', 'error');
                                     addItem(p);
-                                    e.currentTarget.blur();
                                 }}
                             >
                                 <div className="product-name">{p.name}</div>
@@ -285,8 +283,9 @@ export default function POSLeft() {
                         </div>
                     </div>
                     <div className="flex gap3 mt2">
-                        <button className="btn btn-ghost" onClick={() => setCustomModal(false)}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setCustomModal(false)}>Batal</button>
                         <button
+                            type="button"
                             className="btn btn-primary btn-block"
                             disabled={!customForm.name.trim() || !customForm.price}
                             onClick={() => {
@@ -349,8 +348,9 @@ export default function POSLeft() {
                             </div>
                         </div>
                         <div className="flex gap3 mt2">
-                            <button className="btn btn-ghost" onClick={() => { setNewProductModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }}>Batal</button>
+                            <button type="button" className="btn btn-ghost" onClick={() => { setNewProductModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }}>Batal</button>
                             <button
+                                type="button"
                                 className="btn btn-primary btn-block"
                                 disabled={!newProductModal.name.trim() || !newProductModal.price}
                                 onClick={handleCreateAndAddProduct}
@@ -376,6 +376,8 @@ export default function POSLeft() {
                             {barcodePickerModal.products.map(p => (
                                 <button
                                     key={p.id}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
                                     className="btn btn-ghost"
                                     style={{ justifyContent: 'space-between', gap: '10px', padding: '12px', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 'var(--r2)' }}
                                     onClick={() => {
@@ -397,7 +399,7 @@ export default function POSLeft() {
                                 </button>
                             ))}
                         </div>
-                        <button className="btn btn-ghost" onClick={() => { setBarcodePickerModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }}>Batal</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => { setBarcodePickerModal(null); setBarcodeInput(''); barcodeRef.current?.focus() }}>Batal</button>
                     </div>
                 )}
             </Modal>

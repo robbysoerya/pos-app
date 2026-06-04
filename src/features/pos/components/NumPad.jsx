@@ -1,4 +1,4 @@
-import Icon from './Icon.jsx'
+import Icon from '../../../components/Icon.jsx'
 import './NumPad.css'
 
 const KEYS = [
@@ -25,7 +25,7 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                 <button
                     key={k}
                     className={`numpad-key ${k === '⌫' ? 'numpad-back' : ''}`}
-                    onPointerDown={() => press(k)}
+                    onPointerDown={(e) => { e.preventDefault(); press(k); }}
                     type="button"
                 >
                     {k === '⌫' ? <Icon name="backspace" size={20} /> : k}
@@ -36,6 +36,7 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                     {onReset && (
                         <button
                             className="numpad-key numpad-reset"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={onReset}
                             type="button"
                             disabled={resetDisabled}
@@ -46,6 +47,7 @@ export default function NumPad({ value, onChange, maxLength = 10, onExact, exact
                     {onExact && (
                         <button
                             className="numpad-key numpad-exact"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={onExact}
                             type="button"
                         >
