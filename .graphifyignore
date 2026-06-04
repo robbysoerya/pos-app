@@ -1,0 +1,7 @@
+# .graphifyignore
+node_modules/
+dist/
+graphify-out/
+public/
+.git/
+.agents/

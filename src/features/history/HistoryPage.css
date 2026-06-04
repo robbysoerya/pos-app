@@ -1,9 +1,9 @@
 .history-summary {
     display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 12px;
-        padding: 16px 20px;
-        background: var(--surface2);
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--surface2);
     border-bottom: 1.5px solid var(--border);
     flex-shrink: 0;
 }
@@ -12,11 +12,11 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-        background: var(--surface);
-        border: 1.5px solid var(--border);
-        border-radius: var(--r2);
-        padding: 12px 14px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r2);
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .summary-val {
@@ -90,22 +90,22 @@
 
 .detail-row {
     display: flex;
-        justify-content: space-between;
+    justify-content: space-between;
     align-items: center;
     font-size: 0.9rem;
-        padding: 4px 0;
-    }
-    
-    .detail-row> :first-child {
-        flex: 1;
-    }
-    
-    .detail-row> :nth-child(2) {
-        text-align: center;
-        min-width: 48px;
-        margin: 0 12px;
-    }
-    
-    .detail-row> :last-child {
-        text-align: right;
+    padding: 4px 0;
+}
+
+.detail-row> :first-child {
+    flex: 1;
+}
+
+.detail-row> :nth-child(2) {
+    text-align: center;
+    min-width: 48px;
+    margin: 0 12px;
+}
+
+.detail-row> :last-child {
+    text-align: right;
 }

@@ -6,12 +6,12 @@ import Icon from './components/Icon.jsx'
 import { Toast } from './components/Toast.jsx'
 import PWAUpdate from './components/PWAUpdate.jsx'
 import db from './db/db.js'
-import Categories from './pages/Categories.jsx'
-import History from './pages/History.jsx'
-import Piutang from './pages/Piutang.jsx'
-import POS from './pages/POS.jsx'
-import Products from './pages/Products.jsx'
-import Settings from './pages/Settings.jsx'
+import Categories from './features/categories/CategoriesPage.jsx'
+import History from './features/history/HistoryPage.jsx'
+import Piutang from './features/piutang/PiutangPage.jsx'
+import POSPage from './features/pos/POSPage.jsx'
+import Products from './features/products/ProductsPage.jsx'
+import Settings from './features/settings/SettingsPage.jsx'
 
 const NAV = [
   { to: '/', icon: 'point_of_sale', label: 'Kasir' },
@@ -142,7 +142,7 @@ export default function App() {
 
         <main className="app-main">
           <Routes>
-            <Route path="/" element={<POS />} />
+            <Route path="/" element={<POSPage />} />
             <Route path="/products" element={<Products />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/history" element={<History />} />
