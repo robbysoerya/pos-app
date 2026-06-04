@@ -107,6 +107,7 @@
   overflow-y: auto;
   padding: 16px 20px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 /* ── Responsive ───────────────────────────────────── */
 @media (max-width: 992px) {
@@ -149,6 +150,7 @@
   .sidebar {
     overflow-y: auto;
     width: 76px;
+    overscroll-behavior: contain;
   }
 
   .sidebar::-webkit-scrollbar {

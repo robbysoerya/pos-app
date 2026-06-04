@@ -231,10 +231,10 @@ export default function POSRight() {
                                 <div className="cart-item-price">{fmtCurrency(item.price)}</div>
                             </div>
                             <div className="cart-item-controls">
-                                <button className="qty-btn" onClick={() => updateQty(item.cartItemId, item.qty - 1)}>−</button>
+                                <button className="qty-btn" onClick={(e) => { updateQty(item.cartItemId, item.qty - 1); e.currentTarget.blur(); }}>−</button>
                                 <span className="qty-value">{item.qty}</span>
-                                <button className="qty-btn" onClick={() => updateQty(item.cartItemId, item.qty + 1)}>+</button>
-                                <button className="remove-btn" onClick={() => removeItem(item.cartItemId)}>
+                                <button className="qty-btn" onClick={(e) => { updateQty(item.cartItemId, item.qty + 1); e.currentTarget.blur(); }}>+</button>
+                                <button className="remove-btn" onClick={(e) => { removeItem(item.cartItemId); e.currentTarget.blur(); }}>
                                     <Icon name="delete" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
                                 </button>
                             </div>

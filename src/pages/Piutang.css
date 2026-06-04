@@ -57,6 +57,7 @@
 .customer-list {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .customer-item {
@@ -189,6 +190,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overscroll-behavior: contain;
 }
 
 .debt-card {

@@ -89,6 +89,29 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    // Disable automatic browser scroll restoration (fixes viewport offset after pull-to-refresh reload)
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual'
+    }
+
+    // Force resetting scroll positions to zero on mount and scroll to prevent viewport layout shift bugs
+    const resetScroll = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0)
+      if (document.body.scrollTop !== 0) document.body.scrollTop = 0
+      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0
+    }
+
+    resetScroll()
+    window.addEventListener('scroll', resetScroll)
+    document.body.addEventListener('scroll', resetScroll)
+
+    return () => {
+      window.removeEventListener('scroll', resetScroll)
+      document.body.removeEventListener('scroll', resetScroll)
+    }
+  }, [])
+
   return (
     <BrowserRouter>
       <div className="app-shell">

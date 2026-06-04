@@ -54,14 +54,16 @@ html,
 body,
 #root {
   height: 100dvh;
-    width: 100vw;
+  width: 100vw;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ── Scrollable container ────────────────────────── */
 .scroll {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* ── Typography ──────────────────────────────────── */

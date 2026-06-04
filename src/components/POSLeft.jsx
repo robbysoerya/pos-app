@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import Modal from './Modal.jsx'
 import { showToast } from './Toast.jsx'
@@ -33,6 +33,34 @@ export default function POSLeft() {
     const [barcodePickerModal, setBarcodePickerModal] = useState(null)
     const barcodeRef = useRef()
     const lastScanRef = useRef({ code: '', at: 0 })
+
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            // If any modal is open in the app, do not redirect focus
+            if (document.querySelector('.modal-backdrop')) {
+                return
+            }
+
+            // If the user is typing in an input, textarea, select, or editable element, do nothing
+            const active = document.activeElement
+            if (active && (
+                active.tagName === 'INPUT' ||
+                active.tagName === 'TEXTAREA' ||
+                active.tagName === 'SELECT' ||
+                active.isContentEditable
+            )) {
+                return
+            }
+
+            // Redirect printable characters (length 1) to the barcode scanner input
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                barcodeRef.current?.focus()
+            }
+        }
+
+        window.addEventListener('keydown', handleGlobalKeyDown)
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+    }, [])
 
     const categories = useLiveQuery(() => db.categories.toArray(), [])
     const unknownBarcodeActionRow = useLiveQuery(() => db.settings.get('unknownBarcodeAction'), [])
@@ -203,9 +231,10 @@ export default function POSLeft() {
                                 key={p.id}
                                 ref={isLast ? lastElementRef : null}
                                 className={'product-card' + (isOutOfStock ? ' out-of-stock' : '')}
-                                onClick={() => {
+                                onClick={(e) => {
                                     if (isOutOfStock) return showToast('Stok habis!', 'error');
                                     addItem(p);
+                                    e.currentTarget.blur();
                                 }}
                             >
                                 <div className="product-name">{p.name}</div>

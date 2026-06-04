@@ -190,6 +190,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    overscroll-behavior: contain;
 }
 
 .cart-title {
@@ -398,6 +399,7 @@
         height: auto;
         min-height: 100%;
         overflow-y: auto;
+        overscroll-behavior: contain;
     }
 
     .pos-left {
@@ -454,6 +456,7 @@
 
     .payment-section {
         overflow-y: auto;
+        overscroll-behavior: contain;
     }
 
     .cart-section {
