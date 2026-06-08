@@ -131,7 +131,9 @@ export async function printReceipt(transaction, storeName = 'My Store', receiptF
                     await printReceipt(transaction, storeName, receiptFooter, false)
                     return
                 }
-            } catch { }
+            } catch {
+                // Ignore reconnection errors, throw initial error instead
+            }
         }
         throw err
     }

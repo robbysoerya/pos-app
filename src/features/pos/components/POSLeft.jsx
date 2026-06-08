@@ -68,8 +68,8 @@ export default function POSLeft() {
     const unknownBarcodeActionRow = useLiveQuery(() => getSettingQuery('unknownBarcodeAction'), [])
     const unknownBarcodeAction = unknownBarcodeActionRow?.value || 'prompt_create'
     const products = useLiveQuery(
-        () => getFilteredProductsQuery(activeCat, searchInput),
-        [activeCat, searchInput]
+        () => getFilteredProductsQuery(activeCat, searchInput, limit),
+        [activeCat, searchInput, limit]
     )
 
     async function handleBarcodeScan(e) {

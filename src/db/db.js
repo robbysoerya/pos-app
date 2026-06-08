@@ -40,4 +40,9 @@ db.version(6).stores({
     products: '++id, name, categoryId, price, stock, low_stock_threshold, barcode, resellerPrice, trackStock',
 })
 
+// v7: adds createdAt index to transactions
+db.version(7).stores({
+    transactions: '++id, createdAt, total, payment, change, paymentType',
+})
+
 export default db

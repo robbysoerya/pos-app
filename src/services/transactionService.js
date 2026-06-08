@@ -3,16 +3,44 @@ import db from '../db/db.js'
 /**
  * Returns a Dexie query promise to fetch transactions, optionally filtered by paymentType.
  * @param {string} filter 'all' | 'cash' | 'qris' | 'debt'
+ * @param {number} [limit]
  */
-export const getTransactionsQuery = async (filter = 'all') => {
-    let q = db.transactions
+export const getTransactionsQuery = async (filter = 'all', limit) => {
+    let q
     if (filter && filter !== 'all') {
-        q = q.where('paymentType').equals(filter)
+        q = db.transactions.where('paymentType').equals(filter).reverse()
+    } else {
+        q = db.transactions.orderBy('id').reverse()
     }
-    const arr = await q.toArray()
-    // Sort in reverse order (newest first)
-    return arr.sort((a, b) => b.id - a.id)
+    if (limit) {
+        return q.limit(limit).toArray()
+    }
+    return q.toArray()
 }
+/**
+ * Returns a query promise to retrieve transactions within a date range using the createdAt index.
+ * @param {string} startDate 'YYYY-MM-DD'
+ * @param {string} endDate 'YYYY-MM-DD'
+ * @param {string} filter 'all' | 'cash' | 'qris' | 'debt'
+ */
+export const getTransactionsByDateRangeQuery = async (startDate, endDate, filter = 'all') => {
+    if (!startDate && !endDate) {
+        return getTransactionsQuery(filter)
+    }
+    
+    // Construct ISO bounds for the local YYYY-MM-DD dates (assuming local dates are compatible with ISO text sorting)
+    const startISO = startDate ? `${startDate}T00:00:00.000` : '0000-00-00T00:00:00.000'
+    const endISO = endDate ? `${endDate}T23:59:59.999` : '9999-12-31T23:59:59.999'
+    
+    let collection = db.transactions.where('createdAt').between(startISO, endISO, true, true)
+    
+    if (filter && filter !== 'all') {
+        collection = collection.filter(t => t.paymentType === filter)
+    }
+    
+    return collection.reverse().toArray()
+}
+
 
 /**
  * Retrieves all items associated with a transaction.

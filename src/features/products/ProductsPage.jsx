@@ -5,7 +5,7 @@ import Modal from '../../components/Modal.jsx'
 import { showToast } from '../../components/Toast.jsx'
 import { getCategoriesQuery } from '../../services/categoryService.js'
 import {
-    getAllProductsQuery,
+    getFilteredProductsQuery,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -19,7 +19,6 @@ const EMPTY_FORM = { name: '', categoryId: '', price: '', resellerPrice: '', sto
 
 export default function ProductsPage() {
     const categories = useLiveQuery(getCategoriesQuery, [])
-    const products = useLiveQuery(getAllProductsQuery, [])
 
     const [modal, setModal] = useState(null)
     const [form, setForm] = useState(EMPTY_FORM)
@@ -29,6 +28,11 @@ export default function ProductsPage() {
     const [bulkUploadModal, setBulkUploadModal] = useState(false)
     const [bulkUploadLoading, setBulkUploadLoading] = useState(false)
     const [limit, setLimit] = useState(50)
+
+    const products = useLiveQuery(
+        () => getFilteredProductsQuery(null, search, limit),
+        [search, limit]
+    )
 
     const observer = useRef(null)
     const lastElementRef = useCallback(node => {
@@ -135,8 +139,7 @@ export default function ProductsPage() {
         }
     }
 
-    const filtered = (products || []).filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-    const displayedProducts = filtered.slice(0, limit)
+    const displayedProducts = products || []
     const catMap = Object.fromEntries((categories || []).map(c => [c.id, fmtCapitalize(c.name)]))
 
     return (
@@ -165,7 +168,7 @@ export default function ProductsPage() {
                     />
                 </div>
 
-                {filtered.length === 0 && (
+                {displayedProducts.length === 0 && (
                     <div className="empty-state">
                         <Icon name="inventory_2" size={48} className="empty-icon" />
                         <p>{search ? 'Produk tidak ditemukan' : 'Belum ada produk'}</p>

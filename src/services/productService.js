@@ -13,17 +13,18 @@ export const getAllProductsQuery = () => {
  * @param {number|null} activeCat
  * @param {string} searchInput
  */
-export const getFilteredProductsQuery = async (activeCat, searchInput) => {
-    let q = db.products
+export const getFilteredProductsQuery = async (activeCat, searchInput, limit = 50) => {
+    let q
     if (activeCat !== null) {
-        q = q.where('categoryId').equals(activeCat)
+        q = db.products.where('categoryId').equals(activeCat)
+    } else {
+        q = db.products.orderBy('name')
     }
-    let arr = await q.toArray()
-    if (searchInput.trim()) {
-        const s = searchInput.toLowerCase()
-        arr = arr.filter(p => p.name.toLowerCase().includes(s) || (p.barcode && p.barcode.includes(s)))
+    if (!searchInput.trim()) {
+        return q.limit(limit).toArray()
     }
-    return arr
+    const s = searchInput.toLowerCase()
+    return q.filter(p => p.name.toLowerCase().includes(s) || (p.barcode && p.barcode.includes(s))).limit(limit).toArray()
 }
 
 /**

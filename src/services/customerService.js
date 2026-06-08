@@ -30,6 +30,33 @@ export const getCustomerDebtsQuery = (customerId) => {
 }
 
 /**
+ * Returns a query promise to retrieve debts for a customer with their payment histories resolved in bulk.
+ * @param {number|string} customerId
+ */
+export const getCustomerDebtsWithPaymentsQuery = async (customerId) => {
+    const debts = await db.debts.where('customerId').equals(customerId).toArray()
+    debts.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    if (debts.length === 0) return []
+    
+    const debtIds = debts.map(d => d.id)
+    const payments = await db.debt_payments.where('debtId').anyOf(debtIds).toArray()
+    
+    const paymentsMap = new Map()
+    for (const p of payments) {
+        if (!paymentsMap.has(p.debtId)) {
+            paymentsMap.set(p.debtId, [])
+        }
+        paymentsMap.get(p.debtId).push(p)
+    }
+    
+    return debts.map(d => ({
+        ...d,
+        payments: paymentsMap.get(d.id) || []
+    }))
+}
+
+
+/**
  * Fetches a single transaction by ID (helper).
  * @param {number|string} id
  */
@@ -107,17 +134,30 @@ export const recordBulkDebtPayments = async ({ unpaidDebts, amount, note }) => {
 /**
  * Returns a list of all debt payments with their resolved customer names.
  */
-export const getResolvedDebtPaymentsQuery = async () => {
-    const p = await db.debt_payments.toArray()
-    return Promise.all(p.map(async (pay) => {
-        const debt = await db.debts.get(pay.debtId)
-        let customerName = 'Pelanggan'
-        if (debt) {
-            const customer = await db.customers.get(debt.customerId)
-            if (customer) customerName = customer.name
+export const getResolvedDebtPaymentsQuery = async (filterFn) => {
+    let p = await db.debt_payments.toArray()
+    if (filterFn) {
+        p = p.filter(filterFn)
+    }
+    if (p.length === 0) return []
+    
+    // Bulk resolve debts and customers in single database roundtrips
+    const debtIds = [...new Set(p.map(x => x.debtId))]
+    const debts = await db.debts.where('id').anyOf(debtIds).toArray()
+    const debtMap = new Map(debts.map(d => [d.id, d]))
+    
+    const customerIds = [...new Set(debts.map(d => d.customerId))]
+    const customers = await db.customers.where('id').anyOf(customerIds).toArray()
+    const customerMap = new Map(customers.map(c => [c.id, c]))
+    
+    return p.map(pay => {
+        const debt = debtMap.get(pay.debtId)
+        const customer = debt ? customerMap.get(debt.customerId) : null
+        return {
+            ...pay,
+            customerName: customer ? customer.name : 'Pelanggan'
         }
-        return { ...pay, customerName }
-    }))
+    })
 }
 
 /**

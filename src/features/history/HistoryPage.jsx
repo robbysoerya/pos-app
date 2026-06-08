@@ -3,7 +3,7 @@ import { useState } from 'react'
 import Icon from '../../components/Icon.jsx'
 import Modal from '../../components/Modal.jsx'
 import { showToast } from '../../components/Toast.jsx'
-import { getTransactionsQuery, getTransactionItems } from '../../services/transactionService.js'
+import { getTransactionsByDateRangeQuery, getTransactionItems } from '../../services/transactionService.js'
 import { getSettingQuery } from '../../services/settingsService.js'
 import { getResolvedDebtPaymentsQuery, getCustomerNameByTransactionId } from '../../services/customerService.js'
 import { printReceipt } from '../../utils/bluetooth.js'
@@ -11,8 +11,6 @@ import { fmtCurrency, fmtDateTime, fmtTxnId } from '../../utils/format.js'
 import './HistoryPage.css'
 
 export default function HistoryPage() {
-    const transactions = useLiveQuery(() => getTransactionsQuery('all'), [])
-
     const [detail, setDetail] = useState(null)
 
     const getLocalDateString = (d) => {
@@ -26,6 +24,12 @@ export default function HistoryPage() {
     const [startDate, setStartDate] = useState(today)
     const [endDate, setEndDate] = useState(today)
     const [typeFilter, setTypeFilter] = useState('all')
+
+    const transactions = useLiveQuery(
+        () => getTransactionsByDateRangeQuery(startDate, endDate, 'all'),
+        [startDate, endDate]
+    )
+
 
     function isWithinRange(dateStr) {
         if (!dateStr) return false
@@ -55,12 +59,11 @@ export default function HistoryPage() {
         }
     }
 
-    const filtered = (transactions || []).filter(txn => isWithinRange(txn.createdAt))
+    const filtered = transactions || []
 
     // Fetch debt payments and resolve customer names for the UI unified list
     const debtPayments = useLiveQuery(async () => {
-        const p = await getResolvedDebtPaymentsQuery()
-        return p.filter(x => isWithinRange(x.createdAt))
+        return getResolvedDebtPaymentsQuery(x => isWithinRange(x.createdAt))
     }, [startDate, endDate]) || []
 
     const allUnifiedItems = [
@@ -84,16 +87,12 @@ export default function HistoryPage() {
 
     const maxTransaction = filtered.reduce((max, t) => Math.max(max, t.total), 0)
 
-    // Calculate total outstanding piutang for the filtered date
     const totalPiutang = useLiveQuery(async () => {
-        // Here we read all debts, which is setting/customer domain. We keep it direct to avoid overhead or put in service:
-        // We'll resolve outstanding debt totals:
-        // It's safe to do this aggregation within the hook or we can add it to customerService if needed.
-        // Let's keep it here for query performance.
-        const debts = await import('../../db/db.js').then(m => m.default.debts.toArray())
-        return debts
-            .filter(d => isWithinRange(d.createdAt))
-            .reduce((s, d) => s + (d.amount - d.paidAmount), 0)
+        const startISO = startDate ? `${startDate}T00:00:00.000` : '0000-00-00T00:00:00.000'
+        const endISO = endDate ? `${endDate}T23:59:59.999` : '9999-12-31T23:59:59.999'
+        const dbMod = await import('../../db/db.js')
+        const debts = await dbMod.default.debts.where('createdAt').between(startISO, endISO, true, true).toArray()
+        return debts.reduce((s, d) => s + (d.amount - d.paidAmount), 0)
     }, [startDate, endDate, unifiedItems.length])
 
     // Calculate Best Seller for the current filtered date

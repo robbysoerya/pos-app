@@ -1,12 +1,12 @@
-# Graph Report - pos-app  (2026-06-04)
+# Graph Report - pos-app  (2026-06-05)
 
 ## Corpus Check
-- 27 files · ~16,376 words
+- 27 files · ~16,589 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 102 nodes · 108 edges · 4 communities detected
-- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 18 edges (avg confidence: 0.8)
+- 104 nodes · 111 edges · 5 communities detected
+- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 18 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -14,6 +14,7 @@
 - [[_COMMUNITY_Community 1|Community 1]]
 - [[_COMMUNITY_Community 4|Community 4]]
 - [[_COMMUNITY_Community 5|Community 5]]
+- [[_COMMUNITY_Community 6|Community 6]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `DebtCard()` - 7 edges
@@ -57,13 +58,21 @@ Nodes (4): CategoriesPage(), POSRight(), fmtCapitalize(), parseAmount()
 Cohesion: 0.52
 Nodes (6): compressJSON(), decompressBlob(), exportBackup(), getBackupData(), importBackup(), sendBackupToTelegram()
 
+### Community 6 - "Community 6"
+Cohesion: 0.33
+Nodes (2): getTransactionsByDateRangeQuery(), getTransactionsQuery()
+
+## Knowledge Gaps
+- **Thin community `Community 6`** (7 nodes): `createCashCheckout()`, `createDebtCheckout()`, `createQrisCheckout()`, `getTransactionItems()`, `getTransactionsByDateRangeQuery()`, `getTransactionsQuery()`, `transactionService.js`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `fmtCurrency()` connect `Community 0` to `Community 1`, `Community 4`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Why does `fmtDateTime()` connect `Community 0` to `Community 1`, `Community 4`?**
-  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+  _High betweenness centrality (0.027) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `DebtCard()` (e.g. with `fmtDateTime()` and `fmtTxnId()`) actually correct?**
   _`DebtCard()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 5 inferred relationships involving `fmtCurrency()` (e.g. with `PiutangPage()` and `DebtCard()`) actually correct?**

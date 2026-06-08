@@ -6,9 +6,8 @@ import { showToast } from '../../components/Toast.jsx'
 import {
     getCustomersQuery,
     addCustomer,
-    getCustomerDebtsQuery,
+    getCustomerDebtsWithPaymentsQuery,
     getTransactionById,
-    getDebtPayments,
     recordDebtPayment,
     recordBulkDebtPayments
 } from '../../services/customerService.js'
@@ -61,13 +60,12 @@ export default function PiutangPage() {
     // All customers (plain list)
     const customers = useLiveQuery(getCustomersQuery, [])
 
-    // Summary of outstanding debts per customer
+    // Summary of outstanding debts per customer (only querying active/unpaid debts)
     const debtSummary = useLiveQuery(async () => {
         const dbMod = await import('../../db/db.js')
-        const allDebts = await dbMod.default.debts.toArray()
+        const activeDebts = await dbMod.default.debts.where('status').notEqual('lunas').toArray()
         const map = {}
-        for (const d of allDebts) {
-            if (d.status === 'lunas') continue
+        for (const d of activeDebts) {
             if (!map[d.customerId]) map[d.customerId] = { outstanding: 0, oldestCreatedAt: d.createdAt }
             map[d.customerId].outstanding += d.amount - d.paidAmount
             if (d.createdAt < map[d.customerId].oldestCreatedAt) {
@@ -77,17 +75,10 @@ export default function PiutangPage() {
         return map
     }, [])
 
-    // Debts for selected customer
+    // Debts for selected customer resolved in a single bulk database query
     const customerDebts = useLiveQuery(async () => {
         if (!selectedCustomer) return []
-        const debts = await getCustomerDebtsQuery(selectedCustomer.id)
-        // Sort newest first
-        debts.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        // Attach payment history
-        return Promise.all(debts.map(async d => {
-            const payments = await getDebtPayments(d.id)
-            return { ...d, payments }
-        }))
+        return getCustomerDebtsWithPaymentsQuery(selectedCustomer.id)
     }, [selectedCustomer?.id])
 
     // Merge customer list with debt summary for display
