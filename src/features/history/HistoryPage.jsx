@@ -51,8 +51,10 @@ export default function HistoryPage() {
     async function handleReprint(txn) {
         try {
             const storeName = (await getSettingQuery('storeName'))?.value || 'My Store'
+            const storeAddress = (await getSettingQuery('storeAddress'))?.value || ''
+            const storePhone = (await getSettingQuery('storePhone'))?.value || ''
             const receiptFooter = (await getSettingQuery('receiptFooter'))?.value || 'Terima kasih!'
-            await printReceipt(txn, storeName, receiptFooter)
+            await printReceipt(txn, { storeName, storeAddress, storePhone, receiptFooter })
             showToast('Berhasil print!', 'success')
         } catch (e) {
             showToast(e.message, 'error')

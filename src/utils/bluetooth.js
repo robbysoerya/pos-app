@@ -104,7 +104,40 @@ async function sendData(bytes) {
 }
 
 /** Format a receipt and print it */
-export async function printReceipt(transaction, storeName = 'My Store', receiptFooter = 'Terima kasih!', retry = true) {
+export async function printReceipt(
+    transaction,
+    storeNameOrOptions = 'My Store',
+    receiptFooter = 'Terima kasih!',
+    storeAddressOrRetry = '',
+    storePhone = '',
+    retry = true
+) {
+    let storeName = 'My Store'
+    let footer = receiptFooter
+    let storeAddress = ''
+    let phone = ''
+    let shouldRetry = true
+
+    if (typeof storeNameOrOptions === 'object' && storeNameOrOptions !== null) {
+        storeName = storeNameOrOptions.storeName || 'My Store'
+        footer = storeNameOrOptions.receiptFooter || 'Terima kasih!'
+        storeAddress = storeNameOrOptions.storeAddress || ''
+        phone = storeNameOrOptions.storePhone || ''
+        shouldRetry = storeNameOrOptions.retry !== undefined ? storeNameOrOptions.retry : true
+    } else {
+        storeName = storeNameOrOptions || 'My Store'
+        footer = receiptFooter || 'Terima kasih!'
+        if (typeof storeAddressOrRetry === 'boolean') {
+            shouldRetry = storeAddressOrRetry
+            storeAddress = ''
+            phone = ''
+        } else {
+            storeAddress = storeAddressOrRetry || ''
+            phone = storePhone || ''
+            shouldRetry = retry !== undefined ? retry : true
+        }
+    }
+
     try {
         if (!isPrinterConnected()) {
             let reconnected = await autoConnectPrinter()
@@ -118,17 +151,23 @@ export async function printReceipt(transaction, storeName = 'My Store', receiptF
             }
         }
 
-        const lines = buildReceipt(transaction, storeName, receiptFooter)
+        const lines = buildReceipt(transaction, storeName, footer, storeAddress, phone)
         await sendData(lines)
     } catch (err) {
-        if (retry) {
+        if (shouldRetry) {
             // attempt to reconnect once if device reference exists
             try {
                 if (_device) {
                     const server = await _device.gatt.connect()
                     const service = await server.getPrimaryService(PRINTER_SERVICE_UUID)
                     _char = await service.getCharacteristic(PRINTER_CHAR_UUID)
-                    await printReceipt(transaction, storeName, receiptFooter, false)
+                    await printReceipt(transaction, {
+                        storeName,
+                        receiptFooter: footer,
+                        storeAddress,
+                        storePhone: phone,
+                        retry: false
+                    })
                     return
                 }
             } catch {
@@ -139,7 +178,7 @@ export async function printReceipt(transaction, storeName = 'My Store', receiptF
     }
 }
 
-function buildReceipt(txn, storeName, receiptFooter = 'Terima kasih!') {
+function buildReceipt(txn, storeName, receiptFooter = 'Terima kasih!', storeAddress = '', storePhone = '') {
     const bytes = []
     const push = (...cmds) => cmds.forEach(c => bytes.push(...(Array.isArray(c) ? c : [c])))
     const text = (str) => [...new TextEncoder().encode(str + '\n')]
@@ -153,6 +192,16 @@ function buildReceipt(txn, storeName, receiptFooter = 'Terima kasih!') {
     push(...ALIGN_CENTER, ...BOLD_ON, ...DOUBLE_HEIGHT)
     push(...text(storeName))
     push(...NORMAL_SIZE, ...BOLD_OFF)
+    if (storeAddress) {
+        storeAddress.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
+            push(...text(line))
+        })
+    }
+    if (storePhone) {
+        const p = storePhone.trim()
+        const hasPrefix = /^(telp|tel|phone|no|wa|whatsapp)/i.test(p)
+        push(...text(hasPrefix ? p : `Telp: ${p}`))
+    }
     push(...text('================================'))
     push(...ALIGN_LEFT)
 

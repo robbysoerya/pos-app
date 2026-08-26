@@ -555,10 +555,14 @@ function ReceiptPreview({ txn, onClose }) {
     const handleReprint = async () => {
         try {
             const storeNameRow = await getSettingQuery('storeName')
+            const storeAddressRow = await getSettingQuery('storeAddress')
+            const storePhoneRow = await getSettingQuery('storePhone')
             const receiptFooterRow = await getSettingQuery('receiptFooter')
             const storeName = storeNameRow?.value || 'My Store'
+            const storeAddress = storeAddressRow?.value || ''
+            const storePhone = storePhoneRow?.value || ''
             const receiptFooter = receiptFooterRow?.value || 'Terima kasih!'
-            await printReceipt(txn, storeName, receiptFooter)
+            await printReceipt(txn, { storeName, storeAddress, storePhone, receiptFooter })
             showToast('Berhasil print!', 'success')
         } catch (e) {
             showToast(e.message, 'error')

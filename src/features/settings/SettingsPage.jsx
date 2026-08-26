@@ -11,6 +11,8 @@ import './SettingsPage.css'
 
 export default function SettingsPage() {
     const [storeName, setStoreName] = useState('')
+    const [storeAddress, setStoreAddress] = useState('')
+    const [storePhone, setStorePhone] = useState('')
     const [receiptFooter, setReceiptFooter] = useState('Terima kasih!')
     const [telegramToken, setTelegramToken] = useState('')
     const [telegramChatId, setTelegramChatId] = useState('')
@@ -40,6 +42,8 @@ export default function SettingsPage() {
 
     useEffect(() => {
         getSettingQuery('storeName').then(s => { if (s) setStoreName(s.value) })
+        getSettingQuery('storeAddress').then(s => { if (s) setStoreAddress(s.value) })
+        getSettingQuery('storePhone').then(s => { if (s) setStorePhone(s.value) })
         getSettingQuery('receiptFooter').then(s => { if (s) setReceiptFooter(s.value) })
         getSettingQuery('telegramToken').then(s => { if (s) setTelegramToken(s.value) })
         getSettingQuery('telegramChatId').then(s => { if (s) setTelegramChatId(s.value) })
@@ -52,9 +56,11 @@ export default function SettingsPage() {
         return () => window.removeEventListener('beforeinstallprompt', handler)
     }, [])
 
-    async function saveStoreName() {
+    async function saveStoreInfo() {
         await saveSetting('storeName', storeName.trim() || 'My Store')
-        showToast('Nama toko disimpan', 'success')
+        await saveSetting('storeAddress', storeAddress.trim())
+        await saveSetting('storePhone', storePhone.trim())
+        showToast('Informasi toko disimpan', 'success')
     }
 
     async function saveReceiptFooter() {
@@ -176,6 +182,8 @@ export default function SettingsPage() {
             await clearAllData()
             showToast('Semua data dihapus', 'info')
             setStoreName('')
+            setStoreAddress('')
+            setStorePhone('')
         } catch (e) {
             showToast('Gagal menghapus data: ' + e.message, 'error')
         }
@@ -190,14 +198,45 @@ export default function SettingsPage() {
                 <div className="settings-sections">
 
                     <section className="settings-card">
-                        <h2><Icon name="storefront" size={20} style={{ marginRight: 6 }} />Nama Toko</h2>
-                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di header struk.</p>
-                        <div className="flex gap3">
-                            <input id="store-name-input" className="input" placeholder="My Store"
-                                value={storeName} onChange={e => setStoreName(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && saveStoreName()} />
-                            <button className="btn btn-primary" onClick={saveStoreName}>
-                                <Icon name="save" size={18} /> Simpan
+                        <h2><Icon name="storefront" size={20} style={{ marginRight: 6 }} />Informasi Toko</h2>
+                        <p className="text2" style={{ fontSize: '0.85rem', marginBottom: 12 }}>Tampil di bagian header struk pembayaran.</p>
+                        <div className="flex-col gap3">
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label htmlFor="store-name-input">Nama Toko</label>
+                                <input
+                                    id="store-name-input"
+                                    className="input"
+                                    placeholder="My Store"
+                                    value={storeName}
+                                    onChange={e => setStoreName(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label htmlFor="store-address-input">Alamat Toko</label>
+                                <textarea
+                                    id="store-address-input"
+                                    className="input"
+                                    placeholder="Contoh: Jl. Sudirman No. 12, Jakarta"
+                                    rows={2}
+                                    style={{ minHeight: '60px', height: 'auto', resize: 'vertical', fontFamily: 'inherit' }}
+                                    value={storeAddress}
+                                    onChange={e => setStoreAddress(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label htmlFor="store-phone-input">Nomor Telepon / WhatsApp</label>
+                                <input
+                                    id="store-phone-input"
+                                    className="input"
+                                    type="tel"
+                                    placeholder="Contoh: 081234567890"
+                                    value={storePhone}
+                                    onChange={e => setStorePhone(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && saveStoreInfo()}
+                                />
+                            </div>
+                            <button id="save-store-info-btn" className="btn btn-primary" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={saveStoreInfo}>
+                                <Icon name="save" size={18} /> Simpan Informasi Toko
                             </button>
                         </div>
                     </section>

@@ -1,83 +1,108 @@
-# Graph Report - pos-app  (2026-06-05)
+# Graph Report - pos-app  (2026-08-26)
 
 ## Corpus Check
-- 27 files · ~16,589 words
+- 29 files · ~16,976 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 104 nodes · 111 edges · 5 communities detected
-- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 18 edges (avg confidence: 0.8)
+- 207 nodes · 499 edges · 10 communities
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
+## Graph Freshness
+- Built from commit: `41e6bc6d`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
+
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_Community 0|Community 0]]
-- [[_COMMUNITY_Community 1|Community 1]]
-- [[_COMMUNITY_Community 4|Community 4]]
-- [[_COMMUNITY_Community 5|Community 5]]
-- [[_COMMUNITY_Community 6|Community 6]]
+- POSRight.jsx
+- POSLeft.jsx
+- showToast
+- dependencies
+- devDependencies
+- bluetooth.js
+- React + Vite
+- App.jsx
 
 ## God Nodes (most connected - your core abstractions)
-1. `DebtCard()` - 7 edges
-2. `fmtCurrency()` - 7 edges
-3. `fmtDateTime()` - 6 edges
-4. `printReceipt()` - 6 edges
-5. `fmtTxnId()` - 5 edges
-6. `PiutangPage()` - 4 edges
-7. `SettingsPage()` - 4 edges
-8. `ReceiptPreview()` - 4 edges
-9. `HistoryPage()` - 4 edges
-10. `POSRight()` - 3 edges
+1. `showToast()` - 38 edges
+2. `SettingsPage()` - 22 edges
+3. `ProductsPage()` - 15 edges
+4. `fmtCurrency()` - 15 edges
+5. `Icon()` - 13 edges
+6. `PiutangPage()` - 13 edges
+7. `POSRight()` - 12 edges
+8. `HistoryPage()` - 11 edges
+9. `POSLeft()` - 11 edges
+10. `fmtDateTime()` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `SettingsPage()` --calls--> `fmtDateTime()`  [INFERRED]
-  src/features/settings/SettingsPage.jsx → src/utils/format.js
-- `POSRight()` --calls--> `fmtCurrency()`  [INFERRED]
-  src/features/pos/components/POSRight.jsx → src/utils/bluetooth.js
-- `PiutangPage()` --calls--> `fmtCurrency()`  [INFERRED]
-  src/features/piutang/PiutangPage.jsx → src/utils/bluetooth.js
-- `PiutangPage()` --calls--> `fmtTxnId()`  [INFERRED]
-  src/features/piutang/PiutangPage.jsx → src/utils/format.js
-- `PiutangPage()` --calls--> `fmtDateTime()`  [INFERRED]
-  src/features/piutang/PiutangPage.jsx → src/utils/format.js
+- `CategoriesPage()` --indirect_call--> `getCategoriesQuery()`  [INFERRED]
+  src/features/categories/CategoriesPage.jsx → src/services/categoryService.js
+- `confirmDelete()` --calls--> `showToast()`  [EXTRACTED]
+  src/features/categories/CategoriesPage.jsx → src/components/Toast.jsx
+- `handleDelete()` --calls--> `showToast()`  [EXTRACTED]
+  src/features/categories/CategoriesPage.jsx → src/components/Toast.jsx
+- `handleSave()` --calls--> `showToast()`  [EXTRACTED]
+  src/features/categories/CategoriesPage.jsx → src/components/Toast.jsx
+- `handleReprint()` --calls--> `showToast()`  [EXTRACTED]
+  src/features/history/HistoryPage.jsx → src/components/Toast.jsx
 
-## Communities
+## Import Cycles
+- None detected.
 
-### Community 0 - "Community 0"
-Cohesion: 0.28
-Nodes (10): ReceiptPreview(), HistoryPage(), ageBarClass(), ageBarWidth(), ageDaysLabel(), DebtCard(), PiutangPage(), fmtCurrency() (+2 more)
+## Communities (10 total, 0 thin omitted)
 
-### Community 1 - "Community 1"
-Cohesion: 0.31
-Nodes (8): SettingsPage(), autoConnectPrinter(), buildReceipt(), connectPrinter(), getPrinterName(), isPrinterConnected(), printReceipt(), sendData()
+### Community 0 - "POSRight.jsx"
+Cohesion: 0.12
+Nodes (34): db, HistoryPage(), openDetail(), ageBarClass(), ageBarWidth(), ageColor(), ageDaysLabel(), DebtCard() (+26 more)
 
-### Community 4 - "Community 4"
-Cohesion: 0.22
-Nodes (4): CategoriesPage(), POSRight(), fmtCapitalize(), parseAmount()
+### Community 1 - "POSLeft.jsx"
+Cohesion: 0.11
+Nodes (20): POSLeft(), handleBarcodeScan(), handleCreateAndAddProduct(), POSPage(), useCartStore, ProductsPage(), adjustStock(), confirmDelete() (+12 more)
 
-### Community 5 - "Community 5"
-Cohesion: 0.52
-Nodes (6): compressJSON(), decompressBlob(), exportBackup(), getBackupData(), importBackup(), sendBackupToTelegram()
+### Community 2 - "showToast"
+Cohesion: 0.15
+Nodes (23): showToast(), SettingsPage(), clearQrisImage(), confirmClearAll(), confirmImport(), executeManualExport(), handleDisconnect(), handleExport() (+15 more)
 
-### Community 6 - "Community 6"
-Cohesion: 0.33
-Nodes (2): getTransactionsByDateRangeQuery(), getTransactionsQuery()
+### Community 3 - "dependencies"
+Cohesion: 0.08
+Nodes (24): dexie, dexie-react-hooks, dependencies, dexie, dexie-react-hooks, react, react-dom, react-router-dom (+16 more)
+
+### Community 4 - "devDependencies"
+Cohesion: 0.10
+Nodes (21): eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, devDependencies, eslint, @eslint/js (+13 more)
+
+### Community 5 - "bluetooth.js"
+Cohesion: 0.14
+Nodes (19): handleReprint(), handleConnect(), ALIGN_CENTER, ALIGN_LEFT, autoConnectPrinter(), BOLD_OFF, BOLD_ON, buildReceipt() (+11 more)
+
+### Community 6 - "React + Vite"
+Cohesion: 0.50
+Nodes (3): Expanding the ESLint configuration, React Compiler, React + Vite
+
+### Community 10 - "App.jsx"
+Cohesion: 0.14
+Nodes (19): App(), NAV, Icon(), Modal(), PWAUpdate(), Toast(), CategoriesPage(), confirmDelete() (+11 more)
 
 ## Knowledge Gaps
-- **Thin community `Community 6`** (7 nodes): `createCashCheckout()`, `createDebtCheckout()`, `createQrisCheckout()`, `getTransactionItems()`, `getTransactionsByDateRangeQuery()`, `getTransactionsQuery()`, `transactionService.js`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **39 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+34 more)
+  These have ≤1 connection - possible missing edges or undocumented components.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `fmtCurrency()` connect `Community 0` to `Community 1`, `Community 4`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
-- **Why does `fmtDateTime()` connect `Community 0` to `Community 1`, `Community 4`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Are the 3 inferred relationships involving `DebtCard()` (e.g. with `fmtDateTime()` and `fmtTxnId()`) actually correct?**
-  _`DebtCard()` has 3 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 5 inferred relationships involving `fmtCurrency()` (e.g. with `PiutangPage()` and `DebtCard()`) actually correct?**
-  _`fmtCurrency()` has 5 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 5 inferred relationships involving `fmtDateTime()` (e.g. with `PiutangPage()` and `DebtCard()`) actually correct?**
-  _`fmtDateTime()` has 5 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 4 inferred relationships involving `fmtTxnId()` (e.g. with `PiutangPage()` and `DebtCard()`) actually correct?**
-  _`fmtTxnId()` has 4 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `showToast()` connect `showToast` to `POSRight.jsx`, `POSLeft.jsx`, `App.jsx`, `bluetooth.js`?**
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
+- **Why does `ProductsPage()` connect `POSLeft.jsx` to `POSRight.jsx`, `App.jsx`?**
+  _High betweenness centrality (0.042) - this node is a cross-community bridge._
+- **Why does `SettingsPage()` connect `showToast` to `POSRight.jsx`, `POSLeft.jsx`, `App.jsx`, `bluetooth.js`?**
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
+- **What connects `name`, `private`, `version` to the rest of the system?**
+  _39 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `POSRight.jsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.11655874190564293 - nodes in this community are weakly interconnected._
+- **Should `POSLeft.jsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.1103448275862069 - nodes in this community are weakly interconnected._
+- **Should `dependencies` be split into smaller, more focused modules?**
+  _Cohesion score 0.08 - nodes in this community are weakly interconnected._
